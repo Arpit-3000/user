@@ -94,24 +94,52 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-12">
-      <div className="w-full max-w-2xl">
-        <div className="mb-8 text-center">
-          <Link href="/" className="inline-flex items-center justify-center gap-2">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <Pill className="h-7 w-7" />
-            </div>
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12 relative overflow-hidden">
+      {/* Animated background elements - Medical themed */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Floating medical icons/shapes */}
+        <div className="absolute top-20 left-10 w-20 h-20 opacity-10">
+          <Pill className="w-full h-full text-primary animate-bounce" style={{ animationDuration: '3s', animationDelay: '0s' }} />
+        </div>
+        <div className="absolute top-40 right-20 w-16 h-16 opacity-10">
+          <Pill className="w-full h-full text-primary animate-bounce" style={{ animationDuration: '4s', animationDelay: '1s' }} />
+        </div>
+        <div className="absolute bottom-32 left-1/4 w-24 h-24 opacity-10">
+          <Pill className="w-full h-full text-primary animate-bounce" style={{ animationDuration: '5s', animationDelay: '2s' }} />
+        </div>
+        <div className="absolute bottom-20 right-1/3 w-14 h-14 opacity-10">
+          <Pill className="w-full h-full text-primary animate-bounce" style={{ animationDuration: '3.5s', animationDelay: '0.5s' }} />
+        </div>
+        
+        {/* Animated gradient orbs */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '4s' }}></div>
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-primary/5 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s', animationDelay: '1s' }}></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-primary/3 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '5s', animationDelay: '2s' }}></div>
+      </div>
+
+      <div className="w-full max-w-2xl relative z-10">
+        <div className="mb-8 text-center animate-in fade-in slide-in-from-top-4 duration-700">
+          <Link href="/" className="inline-flex items-center justify-center gap-2 group">
+            <img 
+              src="/logo.png" 
+              alt="ArogyaRx Logo" 
+              className="h-16 w-auto transition-transform group-hover:scale-110 duration-300"
+            />
           </Link>
-          <h1 className="mt-4 text-2xl font-bold text-balance">Create Your Account</h1>
-          <p className="mt-2 text-sm text-muted-foreground text-balance">Join ArogyaRx for better healthcare</p>
+          <h1 className="mt-6 text-3xl font-bold text-balance animate-in fade-in slide-in-from-top-4 duration-700" style={{ animationDelay: '100ms' }}>
+            Create Your Account
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground text-balance animate-in fade-in slide-in-from-top-4 duration-700" style={{ animationDelay: '200ms' }}>
+            Join ArogyaRx for better healthcare
+          </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Sign Up</CardTitle>
+        <Card className="shadow-2xl border animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ animationDelay: '300ms' }}>
+          <CardHeader className="animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ animationDelay: '400ms' }}>
+            <CardTitle className="text-2xl">Sign Up</CardTitle>
             <CardDescription>Enter your details to create an account</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ animationDelay: '500ms' }}>
             <form onSubmit={handleRegister} className="space-y-4">
               {error && (
                 <Alert variant="destructive">
@@ -323,7 +351,14 @@ export default function RegisterPage() {
               </div>
 
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Creating account..." : "Create Account"}
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></span>
+                    Creating account...
+                  </span>
+                ) : (
+                  "Create Account"
+                )}
               </Button>
             </form>
           </CardContent>

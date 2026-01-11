@@ -2,8 +2,6 @@
 import { use } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Navbar } from "@/components/navbar"
-import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -129,10 +127,7 @@ export default function LabTestCategoryPage({ params }: { params: Promise<{ cate
   const tests = allTests.filter((test) => test.category.toLowerCase() === category.toLowerCase())
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
-      <main className="flex-1">
-        <div className="container px-4 py-8 md:px-6">
+    <div className="container px-4 py-8 md:px-6">
           {/* Breadcrumb */}
           <div className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
             <Link href="/" className="hover:text-foreground">
@@ -209,8 +204,5 @@ export default function LabTestCategoryPage({ params }: { params: Promise<{ cate
             ))}
           </div>
         </div>
-      </main>
-      <Footer />
-    </div>
   )
 }

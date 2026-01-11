@@ -76,24 +76,52 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-12">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <Link href="/" className="inline-flex items-center justify-center gap-2">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <Pill className="h-7 w-7" />
-            </div>
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12 relative overflow-hidden">
+      {/* Animated background elements - Medical themed */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Floating medical icons/shapes */}
+        <div className="absolute top-20 left-10 w-20 h-20 opacity-10">
+          <Pill className="w-full h-full text-primary animate-bounce" style={{ animationDuration: '3s', animationDelay: '0s' }} />
+        </div>
+        <div className="absolute top-40 right-20 w-16 h-16 opacity-10">
+          <Pill className="w-full h-full text-primary animate-bounce" style={{ animationDuration: '4s', animationDelay: '1s' }} />
+        </div>
+        <div className="absolute bottom-32 left-1/4 w-24 h-24 opacity-10">
+          <Pill className="w-full h-full text-primary animate-bounce" style={{ animationDuration: '5s', animationDelay: '2s' }} />
+        </div>
+        <div className="absolute bottom-20 right-1/3 w-14 h-14 opacity-10">
+          <Pill className="w-full h-full text-primary animate-bounce" style={{ animationDuration: '3.5s', animationDelay: '0.5s' }} />
+        </div>
+        
+        {/* Animated gradient orbs */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '4s' }}></div>
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-primary/5 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s', animationDelay: '1s' }}></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-primary/3 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '5s', animationDelay: '2s' }}></div>
+      </div>
+
+      <div className="w-full max-w-md relative z-10">
+        <div className="mb-8 text-center animate-in fade-in slide-in-from-top-4 duration-700">
+          <Link href="/" className="inline-flex items-center justify-center gap-2 group">
+            <img 
+              src="/logo.png" 
+              alt="ArogyaRx Logo" 
+              className="h-16 w-auto transition-transform group-hover:scale-110 duration-300"
+            />
           </Link>
-          <h1 className="mt-4 text-2xl font-bold text-balance">Welcome to ArogyaRx</h1>
-          <p className="mt-2 text-sm text-muted-foreground text-balance">Sign in to access your healthcare dashboard</p>
+          <h1 className="mt-6 text-3xl font-bold text-balance animate-in fade-in slide-in-from-top-4 duration-700" style={{ animationDelay: '100ms' }}>
+            Welcome to ArogyaRx
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground text-balance animate-in fade-in slide-in-from-top-4 duration-700" style={{ animationDelay: '200ms' }}>
+            Sign in to access your healthcare dashboard
+          </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Sign In</CardTitle>
+        <Card className="shadow-2xl border animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ animationDelay: '300ms' }}>
+          <CardHeader className="animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ animationDelay: '400ms' }}>
+            <CardTitle className="text-2xl">Sign In</CardTitle>
             <CardDescription>Choose your preferred login method</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ animationDelay: '500ms' }}>
             <Tabs defaultValue="email" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="email">Email</TabsTrigger>
@@ -103,9 +131,9 @@ export default function LoginPage() {
               <TabsContent value="email">
                 <form onSubmit={handleEmailLogin} className="space-y-4">
                   {error && (
-                    <Alert variant="destructive">
-                      <AlertDescription>{error}</AlertDescription>
-                    </Alert>
+                    <div className="text-center py-2 text-sm text-red-600 dark:text-red-400">
+                      {error}
+                    </div>
                   )}
 
                   <div className="space-y-2">
@@ -146,7 +174,14 @@ export default function LoginPage() {
                   </div>
 
                   <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? "Signing in..." : "Sign In"}
+                    {loading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></span>
+                        Signing in...
+                      </span>
+                    ) : (
+                      "Sign In"
+                    )}
                   </Button>
                 </form>
               </TabsContent>
@@ -157,15 +192,17 @@ export default function LoginPage() {
                     <Label htmlFor="phone">Phone Number</Label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <div className="absolute left-9 top-2.5 text-sm text-muted-foreground">+91</div>
                       <Input
                         id="phone"
                         type="tel"
-                        placeholder="+91 98765 43210"
-                        className="pl-9"
+                        placeholder="98765 43210"
+                        className="pl-[4.5rem]"
                         value={phoneLogin.phone}
                         onChange={(e) => setPhoneLogin({ ...phoneLogin, phone: e.target.value })}
                         disabled={otpSent}
                         required
+                        maxLength={10}
                       />
                     </div>
                   </div>
@@ -192,7 +229,16 @@ export default function LoginPage() {
                   )}
 
                   <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? "Processing..." : otpSent ? "Verify OTP" : "Send OTP"}
+                    {loading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></span>
+                        Processing...
+                      </span>
+                    ) : otpSent ? (
+                      "Verify OTP"
+                    ) : (
+                      "Send OTP"
+                    )}
                   </Button>
                 </form>
               </TabsContent>

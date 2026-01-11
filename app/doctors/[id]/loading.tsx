@@ -3,10 +3,7 @@ import { Card, CardContent } from "@/components/ui/card"
 
 export default function Loading() {
   return (
-    <div className="flex min-h-screen flex-col">
-      <div className="h-16 border-b" />
-      <main className="flex-1">
-        <div className="container px-4 py-8 md:px-6">
+    <div className="container px-4 py-8 md:px-6">
           <Skeleton className="mb-4 h-8 w-20" />
 
           <div className="grid gap-8 lg:grid-cols-3">
@@ -54,7 +51,5 @@ export default function Loading() {
             </div>
           </div>
         </div>
-      </main>
-    </div>
   )
 }

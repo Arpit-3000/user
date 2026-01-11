@@ -1,278 +1,510 @@
 "use client"
 
-import { use } from "react"
-import { useRouter } from "next/navigation"
-import { Navbar } from "@/components/navbar"
-import { Footer } from "@/components/footer"
+import { useState, useEffect } from "react"
+import { useParams, useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Calendar, Video, MapPin, Clock, ChevronLeft, Download, Star, FileText, Phone, Mail } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
+import { useToast } from "@/components/ui/use-toast"
+import { Separator } from "@/components/ui/separator"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
+  MapPin,
+  Phone,
+  Mail,
+  Calendar,
+  Clock,
+  Video,
+  ArrowLeft,
+  ExternalLink,
+  FileText,
+  User,
+  CreditCard,
+} from "lucide-react"
 import { format } from "date-fns"
+import { getAppointmentById, cancelAppointment, type Appointment } from "@/lib/api/appointments"
 
-export default function AppointmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
+export default function AppointmentDetailPage() {
+  const params = useParams()
   const router = useRouter()
+  const appointmentId = params.id as string
+  const [appointment, setAppointment] = useState<Appointment | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [cancelling, setCancelling] = useState(false)
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const { toast } = useToast()
 
-  const appointment = {
-    id: resolvedParams.id,
-    doctorName: "Dr. Priya Sharma",
-    specialization: "General Physician",
-    qualification: "MBBS, MD (General Medicine)",
-    experience: 12,
-    date: new Date("2025-01-28"),
-    time: "3:00 PM",
-    type: "online",
-    status: "upcoming",
-    fee: 500,
-    image: "/female-doctor.png",
-    phone: "+91 98765 43210",
-    email: "dr.priya@arogyarx.com",
-    rating: 4.8,
-    reviews: 340,
-    meetingLink: "https://meet.example.com/abc123",
-    bookingDate: new Date("2025-01-25"),
-    patientName: "John Doe",
-    patientPhone: "+91 98765 43210",
-    symptoms: "Fever, headache, body ache",
-    notes: "Patient experiencing symptoms for 2 days. Requests prescription.",
+  useEffect(() => {
+    if (appointmentId) {
+      fetchAppointmentDetails()
+    }
+  }, [appointmentId])
+
+  const fetchAppointmentDetails = async () => {
+    try {
+      setLoading(true)
+      const response = await getAppointmentById(appointmentId)
+
+      if (response.success) {
+        setAppointment(response.data)
+      } else {
+        toast({
+          title: "Error",
+          description: response.message || "Failed to fetch appointment details",
+          variant: "destructive",
+        })
+        router.push("/appointments")
+      }
+    } catch (error) {
+      console.error("Error fetching appointment:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load appointment details",
+        variant: "destructive",
+      })
+      router.push("/appointments")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCancelAppointment = async () => {
+    if (!appointment) return
+
+    try {
+      setCancelling(true)
+      const response = await cancelAppointment(appointment._id)
+
+      if (response.success) {
+        toast({
+          title: "Success",
+          description: "Appointment cancelled successfully",
+        })
+        fetchAppointmentDetails()
+      } else {
+        toast({
+          title: "Error",
+          description: response.message || "Failed to cancel appointment",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error cancelling appointment:", error)
+      toast({
+        title: "Error",
+        description: "Failed to cancel appointment. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setCancelling(false)
+      setShowCancelDialog(false)
+    }
   }
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "upcoming":
-        return "bg-accent text-accent-foreground"
+      case "pending":
+        return "bg-yellow-500 text-white"
+      case "accepted":
+        return "bg-green-500 text-white"
       case "completed":
-        return "bg-primary text-primary-foreground"
+        return "bg-blue-500 text-white"
       case "cancelled":
-        return "bg-destructive text-destructive-foreground"
+        return "bg-red-500 text-white"
+      case "missed":
+        return "bg-gray-500 text-white"
       default:
         return "bg-secondary text-secondary-foreground"
     }
   }
 
+  const getConsultationTypeLabel = (type: string) => {
+    switch (type) {
+      case "online":
+        return "Online Consultation"
+      case "offline":
+        return "In-Clinic Visit"
+      case "virtual":
+        return "Virtual (Video Call)"
+      default:
+        return type
+    }
+  }
+
+  const canCancelAppointment = (appointment: Appointment) => {
+    return appointment.status === "pending" || appointment.status === "accepted"
+  }
+
+  if (loading) {
+    return (
+      <div className="container px-4 py-8 md:px-6">
+        <div className="flex items-center justify-center py-12">
+          <Spinner className="h-8 w-8" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!appointment) {
+    return (
+      <div className="container px-4 py-8 md:px-6">
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center p-12 text-center">
+            <h2 className="mb-2 text-xl font-semibold">Appointment not found</h2>
+            <p className="mb-6 text-muted-foreground">The appointment you're looking for doesn't exist</p>
+            <Button asChild>
+              <Link href="/appointments">Back to Appointments</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  const doctor = appointment.doctor
+  const patient = appointment.patient
+
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
-      <main className="flex-1">
-        <div className="container px-4 py-8 md:px-6">
-          <Button variant="ghost" size="sm" className="mb-4 -ml-2" onClick={() => router.back()}>
-            <ChevronLeft className="mr-1 h-4 w-4" />
-            Back to Appointments
-          </Button>
+    <div className="container px-4 py-8 md:px-6">
+      <Button variant="ghost" className="mb-6" asChild>
+        <Link href="/appointments">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Appointments
+        </Link>
+      </Button>
 
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold">Appointment Details</h1>
-              <p className="mt-1 text-muted-foreground">ID: {appointment.id}</p>
-            </div>
-            <Badge className={getStatusColor(appointment.status)} className="w-fit">
-              {appointment.status.toUpperCase()}
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Appointment Details</h1>
+          {patient && (
+            <p className="text-muted-foreground">
+              Patient: {patient.name} • Appointment ID: {appointment._id.slice(-8)}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge className={getStatusColor(appointment.status)}>{appointment.status.toUpperCase()}</Badge>
+          {appointment.paymentStatus === "paid" && (
+            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+              PAID
             </Badge>
-          </div>
+          )}
+          {appointment.paymentStatus === "pending" && (
+            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+              PAYMENT PENDING
+            </Badge>
+          )}
+        </div>
+      </div>
 
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2 space-y-6">
-              {/* Doctor Information */}
-              <Card>
-                <CardContent className="p-6">
-                  <h2 className="mb-4 text-lg font-semibold">Doctor Information</h2>
-                  <div className="flex gap-4">
-                    <Avatar className="h-20 w-20">
-                      <AvatarImage src={appointment.image || "/placeholder.svg"} alt={appointment.doctorName} />
-                      <AvatarFallback>
-                        {appointment.doctorName
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                      </AvatarFallback>
-                    </Avatar>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Doctor Information */}
+          {doctor && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Doctor Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-4">
+                  <Avatar className="h-20 w-20 shrink-0">
+                    {doctor.profileImage ? (
+                      <AvatarImage 
+                        src={doctor.profileImage} 
+                        alt={doctor.name}
+                        onError={(e) => {
+                          console.log("Doctor image failed to load:", doctor.profileImage)
+                          e.currentTarget.style.display = 'none'
+                        }}
+                      />
+                    ) : null}
+                    <AvatarFallback className="text-lg bg-primary/10">
+                      {doctor.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
 
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold">{appointment.doctorName}</h3>
-                      <p className="text-muted-foreground">{appointment.specialization}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{appointment.qualification}</p>
+                  <div className="flex-1 space-y-2">
+                    <h3 className="text-xl font-semibold">{doctor.name}</h3>
+                    <p className="text-muted-foreground">{doctor.specialization}</p>
+                    <p className="text-sm text-muted-foreground">{doctor.qualification}</p>
 
-                      <div className="mt-3 flex items-center gap-4 text-sm">
-                        <div className="flex items-center gap-1">
-                          <Star className="h-4 w-4 fill-primary text-primary" />
-                          <span className="font-medium">{appointment.rating}</span>
-                          <span className="text-muted-foreground">({appointment.reviews} reviews)</span>
+                    <div className="pt-2 space-y-1">
+                      {doctor.contact && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone className="h-3 w-3 text-muted-foreground" />
+                          <span>{doctor.contact}</span>
                         </div>
-                        <span className="text-muted-foreground">{appointment.experience} years exp.</span>
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap gap-3">
-                        <a href={`tel:${appointment.phone}`}>
-                          <Button variant="outline" size="sm">
-                            <Phone className="mr-2 h-4 w-4" />
-                            Call Doctor
-                          </Button>
-                        </a>
-                        <a href={`mailto:${appointment.email}`}>
-                          <Button variant="outline" size="sm">
-                            <Mail className="mr-2 h-4 w-4" />
-                            Email
-                          </Button>
-                        </a>
-                      </div>
+                      )}
+                      {doctor.email && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Mail className="h-3 w-3 text-muted-foreground" />
+                          <span>{doctor.email}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-              {/* Appointment Details */}
-              <Card>
-                <CardContent className="p-6">
-                  <h2 className="mb-4 text-lg font-semibold">Appointment Details</h2>
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-3">
-                      <Calendar className="mt-0.5 h-5 w-5 text-muted-foreground" />
+          {/* Appointment Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Appointment Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <div className="text-sm text-muted-foreground">Date</div>
+                  <div className="font-medium">{format(new Date(appointment.date), "PPP")}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Time</div>
+                  <div className="font-medium">{appointment.time}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Duration</div>
+                  <div className="font-medium">{appointment.duration} minutes</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Consultation Type</div>
+                  <div className="font-medium">{getConsultationTypeLabel(appointment.consultationType)}</div>
+                </div>
+              </div>
+
+              {appointment.reason && (
+                <>
+                  <Separator />
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">Reason for Visit</div>
+                    <p className="text-sm">{appointment.reason}</p>
+                  </div>
+                </>
+              )}
+
+              {appointment.notes && (
+                <>
+                  <Separator />
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">Doctor's Notes</div>
+                    <p className="text-sm">{appointment.notes}</p>
+                  </div>
+                </>
+              )}
+
+              {appointment.virtualMeeting?.meetLink && appointment.status === "accepted" && (
+                <>
+                  <Separator />
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-2">Virtual Meeting</div>
+                    <Button asChild>
+                      <a href={appointment.virtualMeeting.meetLink} target="_blank" rel="noopener noreferrer">
+                        <Video className="mr-2 h-4 w-4" />
+                        Join Meeting
+                        <ExternalLink className="ml-2 h-3 w-3" />
+                      </a>
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Prescription */}
+          {appointment.prescription && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Prescription
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-lg bg-muted p-4">
+                  <pre className="whitespace-pre-wrap text-sm">{appointment.prescription}</pre>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Patient Information */}
+          {patient && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Patient Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-4 mb-4">
+                  <Avatar className="h-16 w-16 shrink-0">
+                    <AvatarImage src={patient.profileImage || "/placeholder.svg"} alt={patient.name} />
+                    <AvatarFallback className="text-lg">
+                      {patient.name
+                        ?.split(" ")
+                        .map((n: string) => n[0])
+                        .join("") || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold">{patient.name}</h3>
+                    {patient.email && (
+                      <p className="text-sm text-muted-foreground">{patient.email}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {patient.age && (
                       <div>
-                        <div className="font-medium">Date</div>
-                        <div className="text-sm text-muted-foreground">{format(appointment.date, "PPP")}</div>
+                        <div className="text-sm text-muted-foreground">Age</div>
+                        <div className="font-medium">{patient.age} years</div>
                       </div>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <Clock className="mt-0.5 h-5 w-5 text-muted-foreground" />
+                    )}
+                    {patient.gender && (
                       <div>
-                        <div className="font-medium">Time</div>
-                        <div className="text-sm text-muted-foreground">{appointment.time}</div>
+                        <div className="text-sm text-muted-foreground">Gender</div>
+                        <div className="font-medium capitalize">{patient.gender}</div>
                       </div>
-                    </div>
-
-                    {appointment.type === "online" ? (
-                      <div className="flex items-start gap-3">
-                        <Video className="mt-0.5 h-5 w-5 text-primary" />
-                        <div>
-                          <div className="font-medium text-primary">Online Consultation</div>
-                          <div className="mt-1 text-sm text-muted-foreground">Video call via secure link</div>
-                          {appointment.status === "upcoming" && (
-                            <Button size="sm" className="mt-2">
-                              Join Video Call
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start gap-3">
-                        <MapPin className="mt-0.5 h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <div className="font-medium">Clinic Visit</div>
-                          <div className="text-sm text-muted-foreground">City Hospital, Bandra West, Mumbai</div>
-                          <Button variant="link" size="sm" className="mt-1 h-auto p-0">
-                            Get Directions
-                          </Button>
-                        </div>
+                    )}
+                    {patient.contact && (
+                      <div>
+                        <div className="text-sm text-muted-foreground">Contact</div>
+                        <div className="font-medium">{patient.contact}</div>
                       </div>
                     )}
                   </div>
-                </CardContent>
-              </Card>
-
-              {/* Patient Information */}
-              <Card>
-                <CardContent className="p-6">
-                  <h2 className="mb-4 text-lg font-semibold">Patient Information</h2>
-                  <div className="space-y-3">
+                  {patient.address && (
                     <div>
-                      <div className="text-sm text-muted-foreground">Patient Name</div>
-                      <div className="font-medium">{appointment.patientName}</div>
+                      <div className="text-sm text-muted-foreground">Address</div>
+                      <div className="text-sm">
+                        {patient.address.street}, {patient.address.city}, {patient.address.state} -{" "}
+                        {patient.address.pincode}
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">Phone Number</div>
-                      <div className="font-medium">{appointment.patientPhone}</div>
-                    </div>
-                    <Separator />
-                    <div>
-                      <div className="text-sm text-muted-foreground">Symptoms/Concerns</div>
-                      <div className="font-medium">{appointment.symptoms}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">Additional Notes</div>
-                      <div className="font-medium">{appointment.notes}</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Prescription & Reports */}
-              {appointment.status === "completed" && (
-                <Card>
-                  <CardContent className="p-6">
-                    <h2 className="mb-4 text-lg font-semibold">Prescription & Reports</h2>
-                    <div className="space-y-3">
-                      <Button variant="outline" className="w-full justify-start bg-transparent">
-                        <FileText className="mr-2 h-4 w-4" />
-                        Prescription.pdf
-                        <Download className="ml-auto h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" className="w-full justify-start bg-transparent">
-                        <FileText className="mr-2 h-4 w-4" />
-                        Medical Report.pdf
-                        <Download className="ml-auto h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            <div className="lg:col-span-1 space-y-6">
-              {/* Payment Summary */}
-              <Card>
-                <CardContent className="p-6">
-                  <h2 className="mb-4 text-lg font-semibold">Payment Summary</h2>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Consultation Fee</span>
-                      <span>₹{appointment.fee}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Platform Fee</span>
-                      <span className="text-primary">FREE</span>
-                    </div>
-                  </div>
-                  <Separator className="my-4" />
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>Total</span>
-                    <span>₹{appointment.fee}</span>
-                  </div>
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    Booked on {format(appointment.bookingDate, "PPP")}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Actions */}
-              {appointment.status === "upcoming" && (
-                <div className="space-y-2">
-                  <Button className="w-full">Reschedule Appointment</Button>
-                  <Button variant="outline" className="w-full bg-transparent text-destructive">
-                    Cancel Appointment
-                  </Button>
-                  <Button variant="outline" className="w-full bg-transparent">
-                    Need Help?
-                  </Button>
+                  )}
                 </div>
-              )}
-
-              {appointment.status === "completed" && (
-                <div className="space-y-2">
-                  <Button className="w-full">Book Follow-up</Button>
-                  <Button variant="outline" className="w-full bg-transparent">
-                    Rate Doctor
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
-      </main>
-      <Footer />
+
+        {/* Sidebar */}
+        <div className="lg:col-span-1">
+          <Card className="sticky top-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Payment Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Consultation Fee</span>
+                <span className="text-2xl font-bold">₹{appointment.fee}</span>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Payment Status</span>
+                  <Badge
+                    variant={appointment.paymentStatus === "paid" ? "default" : "outline"}
+                    className={
+                      appointment.paymentStatus === "paid"
+                        ? "bg-green-500"
+                        : appointment.paymentStatus === "pending"
+                          ? "bg-yellow-500"
+                          : ""
+                    }
+                  >
+                    {appointment.paymentStatus.toUpperCase()}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Booked On</span>
+                  <span>{format(new Date(appointment.createdAt), "PP")}</span>
+                </div>
+              </div>
+
+              {appointment.paymentStatus === "pending" && (
+                <>
+                  <Separator />
+                  <Button className="w-full" asChild>
+                    <Link href={`/appointments/${appointment._id}/payment`}>
+                      <CreditCard className="mr-2 h-4 w-4" />
+                      Pay Now
+                    </Link>
+                  </Button>
+                </>
+              )}
+
+              {canCancelAppointment(appointment) && (
+                <>
+                  <Separator />
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => setShowCancelDialog(true)}
+                    disabled={cancelling}
+                  >
+                    {cancelling ? (
+                      <>
+                        <Spinner className="mr-2 h-4 w-4" />
+                        Cancelling...
+                      </>
+                    ) : (
+                      "Cancel Appointment"
+                    )}
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Appointment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel this appointment? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>No, Keep It</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCancelAppointment} className="bg-destructive text-destructive-foreground">
+              Yes, Cancel Appointment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

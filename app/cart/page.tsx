@@ -1,227 +1,414 @@
-"use client"
-import Link from "next/link"
-import { Navbar } from "@/components/navbar"
-import { Footer } from "@/components/footer"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Input } from "@/components/ui/input"
-import { Minus, Plus, Trash2, Upload, ShoppingBag } from "lucide-react"
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import { Minus, Plus, Trash2, ShoppingCart, Calendar, Clock, User } from 'lucide-react';
+import { getCart, updateCartQuantity, removeFromCart, clearCart, addToCart, CartItem } from '@/lib/api/cart';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 
 export default function CartPage() {
-  const cartItems = [
-    {
-      id: 1,
-      type: "medicine",
-      name: "Paracetamol 500mg",
-      brand: "Crocin",
-      price: 45,
-      mrp: 60,
-      quantity: 2,
-      prescription: false,
-      image: "/medicine-tablets.jpg",
-    },
-    {
-      id: 2,
-      type: "medicine",
-      name: "Azithromycin 500mg",
-      brand: "Azithral",
-      price: 120,
-      mrp: 150,
-      quantity: 1,
-      prescription: true,
-      prescriptionUploaded: false,
-      image: "/medicine-capsules.jpg",
-    },
-    {
-      id: 3,
-      type: "lab-test",
-      name: "Complete Blood Count (CBC)",
-      description: "24 hours report time",
-      price: 399,
-      mrp: 600,
-      quantity: 1,
-      image: null,
-    },
-  ]
+  const router = useRouter();
+  const { toast } = useToast();
+  const [items, setItems] = useState<CartItem[]>([]);
+  const [totalPrice, setTotalPrice] = useState(0);
+  const [totalItems, setTotalItems] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [updatingItems, setUpdatingItems] = useState<Set<string>>(new Set());
 
-  const hasPrescriptionRequired = cartItems.some((item) => item.type === "medicine" && item.prescription)
+  useEffect(() => {
+    fetchCart();
+  }, []);
 
-  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const discount = cartItems.reduce((sum, item) => sum + (item.mrp - item.price) * item.quantity, 0)
-  const deliveryFee = subtotal > 500 ? 0 : 40
-  const total = subtotal + deliveryFee
+  const fetchCart = async () => {
+    try {
+      setLoading(true);
+      const data = await getCart();
+      setItems(data.cart.items);
+      setTotalPrice(data.totalPrice || 0);
+      setTotalItems(data.totalItems || 0);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateQuantity = async (item: CartItem, newQuantity: number) => {
+    if (newQuantity < 1 || newQuantity > 10) return;
+
+    const itemId = item._id;
+    setUpdatingItems(prev => new Set(prev).add(itemId));
+
+    try {
+      const updateData: any = { quantity: newQuantity };
+
+      if (item.productType === 'medicine' && item.medicineId) {
+        updateData.medicineId = item.medicineId._id;
+      } else if (item.productType === 'categoryProduct' && item.categoryProductId) {
+        updateData.categoryProductId = item.categoryProductId._id;
+      } else if (item.productType === 'labTest' && item.labTestId) {
+        updateData.labTestId = item.labTestId._id;
+        updateData.isHomeCollection = item.isHomeCollection || false;
+      }
+
+      await updateCartQuantity(updateData);
+      
+      toast({
+        title: 'Success',
+        description: 'Quantity updated successfully',
+      });
+      
+      fetchCart();
+    } catch (error: any) {
+      // If update fails, try fallback method
+      try {
+        console.log('Update failed, using fallback method');
+        
+        // Remove and re-add with new quantity
+        const removeData: any = {};
+        const addData: any = { quantity: newQuantity };
+
+        if (item.productType === 'medicine' && item.medicineId) {
+          removeData.medicineId = item.medicineId._id;
+          addData.medicineId = item.medicineId._id;
+        } else if (item.productType === 'categoryProduct' && item.categoryProductId) {
+          removeData.categoryProductId = item.categoryProductId._id;
+          addData.categoryProductId = item.categoryProductId._id;
+        } else if (item.productType === 'labTest' && item.labTestId) {
+          removeData.labTestId = item.labTestId._id;
+          addData.labTestId = item.labTestId._id;
+          removeData.isHomeCollection = item.isHomeCollection || false;
+          addData.isHomeCollection = item.isHomeCollection || false;
+        }
+
+        await removeFromCart(removeData);
+        await addToCart(addData);
+        
+        toast({
+          title: 'Success',
+          description: 'Quantity updated successfully',
+        });
+        
+        fetchCart();
+      } catch (fallbackError: any) {
+        toast({
+          title: 'Error',
+          description: fallbackError.message || 'Failed to update quantity',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setUpdatingItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(itemId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleRemoveItem = async (item: CartItem) => {
+    const itemId = item._id;
+    setUpdatingItems(prev => new Set(prev).add(itemId));
+
+    try {
+      const removeData: any = {};
+
+      if (item.productType === 'medicine' && item.medicineId) {
+        removeData.medicineId = item.medicineId._id;
+      } else if (item.productType === 'categoryProduct' && item.categoryProductId) {
+        removeData.categoryProductId = item.categoryProductId._id;
+      } else if (item.productType === 'labTest' && item.labTestId) {
+        removeData.labTestId = item.labTestId._id;
+        removeData.isHomeCollection = item.isHomeCollection || false;
+      }
+
+      await removeFromCart(removeData);
+      
+      toast({
+        title: 'Success',
+        description: 'Item removed from cart',
+      });
+      
+      fetchCart();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setUpdatingItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(itemId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleClearCart = async () => {
+    if (!confirm('Are you sure you want to clear your cart?')) return;
+
+    try {
+      await clearCart();
+      
+      toast({
+        title: 'Success',
+        description: 'Cart cleared successfully',
+      });
+      
+      fetchCart();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const getProductDetails = (item: CartItem) => {
+    if (item.productType === 'medicine' && item.medicineId) {
+      // Handle both nested inventory and direct stockQuantity
+      const stock = item.medicineId.inventory?.stockQuantity || item.medicineId.stockQuantity || 0;
+      
+      return {
+        name: item.medicineId.productName || 'Unknown Medicine',
+        brand: item.medicineId.brandName || 'Unknown Brand',
+        image: item.medicineId.images?.[0] || '/placeholder.svg',
+        mrp: item.medicineId.pricing?.mrp || 0,
+        price: item.medicineId.pricing?.sellingPrice || 0,
+        stock: stock,
+        prescriptionRequired: item.medicineId.prescriptionRequired || false,
+      };
+    } else if (item.productType === 'categoryProduct' && item.categoryProductId) {
+      return {
+        name: item.categoryProductId.productDetails?.productName || 'Unknown Product',
+        brand: item.categoryProductId.productDetails?.brandName || 'Unknown Brand',
+        image: item.categoryProductId.productDetails?.images?.[0] || '/placeholder.svg',
+        mrp: item.categoryProductId.productDetails?.pricing?.mrp || 0,
+        price: item.categoryProductId.productDetails?.pricing?.sellingPrice || 0,
+        stock: item.categoryProductId.productDetails?.stock?.quantity || 0,
+        prescriptionRequired: false,
+      };
+    } else if (item.productType === 'labTest' && item.labTestId) {
+      return {
+        name: item.labTestId.testName || 'Unknown Test',
+        brand: 'Lab Test',
+        image: '/placeholder-lab-test.jpg',
+        mrp: item.labTestId.price || 0,
+        price: item.labTestId.discountedPrice || 0,
+        stock: 999,
+        prescriptionRequired: false,
+      };
+    }
+    return null;
+  };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading cart...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+          <ShoppingCart className="h-24 w-24 text-muted-foreground mb-4" />
+          <h2 className="text-2xl font-bold mb-2">Your cart is empty</h2>
+          <p className="text-muted-foreground mb-6">Add items to get started</p>
+          <Button onClick={() => router.push('/')}>Continue Shopping</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
-      <main className="flex-1">
-        <div className="container px-4 py-8 md:px-6">
-          <h1 className="mb-8 text-3xl font-bold">Shopping Cart</h1>
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-3xl font-bold">Shopping Cart</h1>
+          <p className="text-muted-foreground mt-1">{totalItems} items in your cart</p>
+        </div>
+        <Button variant="outline" onClick={handleClearCart}>
+          <Trash2 className="h-4 w-4 mr-2" />
+          Clear Cart
+        </Button>
+      </div>
 
-          {cartItems.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center p-12 text-center">
-                <ShoppingBag className="mb-4 h-16 w-16 text-muted-foreground" />
-                <h2 className="mb-2 text-xl font-semibold">Your cart is empty</h2>
-                <p className="mb-6 text-muted-foreground">Add items to your cart to checkout</p>
-                <Button asChild>
-                  <Link href="/medicines">Start Shopping</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-8 lg:grid-cols-3">
-              <div className="lg:col-span-2 space-y-4">
-                {hasPrescriptionRequired && (
-                  <Card className="border-destructive/50 bg-destructive/5">
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-3">
-                        <Upload className="mt-0.5 h-5 w-5 text-destructive" />
-                        <div>
-                          <h3 className="font-semibold">Prescription Required</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Some items in your cart require a valid prescription. Please upload after checkout.
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
+      <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-4">
+          {items.map((item) => {
+            const product = getProductDetails(item);
+            if (!product) return null;
 
-                {cartItems.map((item) => (
-                  <Card key={item.id}>
-                    <CardContent className="p-4">
-                      <div className="flex gap-4">
-                        <div className="h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-muted">
-                          {item.image ? (
-                            <img
-                              src={item.image || "/placeholder.svg"}
-                              alt={item.name}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                              {item.type === "lab-test" ? "Lab Test" : "Item"}
-                            </div>
-                          )}
-                        </div>
+            const isUpdating = updatingItems.has(item._id);
+            const itemTotal = item.price * item.quantity + (item.homeCollectionPrice || 0);
 
-                        <div className="flex flex-1 flex-col justify-between">
-                          <div>
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <h3 className="font-semibold">{item.name}</h3>
-                                {item.brand && <p className="text-sm text-muted-foreground">{item.brand}</p>}
-                                {item.description && (
-                                  <p className="text-sm text-muted-foreground">{item.description}</p>
-                                )}
-                              </div>
-                              <Button variant="ghost" size="icon" className="shrink-0">
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </div>
-
-                            {item.prescription && (
-                              <div className="mt-2">
-                                {item.prescriptionUploaded ? (
-                                  <Badge variant="secondary">Prescription Uploaded</Badge>
-                                ) : (
-                                  <Badge variant="destructive">Prescription Required</Badge>
-                                )}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-lg font-bold">₹{item.price}</span>
-                              <span className="text-sm text-muted-foreground line-through">₹{item.mrp}</span>
-                            </div>
-
-                            {item.type === "medicine" && (
-                              <div className="flex items-center rounded-lg border">
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <Minus className="h-3 w-3" />
-                                </Button>
-                                <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <Plus className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex gap-2">
-                      <Input placeholder="Enter coupon code" />
-                      <Button variant="outline">Apply</Button>
+            return (
+              <Card key={item._id}>
+                <CardContent className="p-4">
+                  <div className="flex gap-4">
+                    <div className="relative h-24 w-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
+                      <Image
+                        src={product.image}
+                        alt={product.name}
+                        fill
+                        className="object-cover"
+                      />
                     </div>
-                  </CardContent>
-                </Card>
-              </div>
 
-              <div className="lg:col-span-1">
-                <div className="sticky top-20">
-                  <Card>
-                    <CardContent className="p-6">
-                      <h2 className="mb-4 text-xl font-bold">Order Summary</h2>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <h3 className="font-semibold line-clamp-1">{product.name}</h3>
+                          <p className="text-sm text-muted-foreground">{product.brand}</p>
+                          
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="secondary" className="text-xs">
+                              {item.productType === 'medicine' ? 'Medicine' : 
+                               item.productType === 'categoryProduct' ? 'Product' : 'Lab Test'}
+                            </Badge>
+                            {product.prescriptionRequired && (
+                              <Badge variant="destructive" className="text-xs">Rx Required</Badge>
+                            )}
+                          </div>
+                        </div>
 
-                      <div className="space-y-3 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Subtotal ({cartItems.length} items)</span>
-                          <span className="font-medium">₹{subtotal}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemoveItem(item)}
+                          disabled={isUpdating}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-3">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleUpdateQuantity(item, item.quantity - 1)}
+                            disabled={isUpdating || item.quantity <= 1}
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <span className="w-8 text-center font-medium">{item.quantity}</span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleUpdateQuantity(item, item.quantity + 1)}
+                            disabled={isUpdating || item.quantity >= 10}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
                         </div>
-                        <div className="flex justify-between text-primary">
-                          <span>Discount</span>
-                          <span className="font-medium">-₹{discount}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Delivery Fee</span>
-                          {deliveryFee === 0 ? (
-                            <span className="font-medium text-primary">FREE</span>
-                          ) : (
-                            <span className="font-medium">₹{deliveryFee}</span>
-                          )}
+
+                        <div className="text-right">
+                          <div className="flex items-center gap-2">
+                            {product.mrp > product.price && (
+                              <span className="text-sm text-muted-foreground line-through">
+                                ₹{product.mrp * item.quantity}
+                              </span>
+                            )}
+                            <span className="font-bold text-lg">₹{itemTotal}</span>
+                          </div>
                         </div>
                       </div>
 
-                      {deliveryFee > 0 && (
-                        <div className="mt-3 rounded-lg bg-muted p-3 text-sm">
-                          <span className="text-muted-foreground">Add ₹{500 - subtotal} more to get FREE delivery</span>
+                      {item.productType === 'labTest' && item.isHomeCollection && (
+                        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg space-y-2">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Calendar className="h-4 w-4 text-blue-600" />
+                            <span className="font-medium">Home Collection</span>
+                            <span className="text-muted-foreground">+₹{item.homeCollectionPrice}</span>
+                          </div>
+                          {item.preferredDate && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Calendar className="h-4 w-4" />
+                              <span>{new Date(item.preferredDate).toLocaleDateString()}</span>
+                            </div>
+                          )}
+                          {item.preferredSlot && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Clock className="h-4 w-4" />
+                              <span>{item.preferredSlot.start} - {item.preferredSlot.end}</span>
+                            </div>
+                          )}
+                          {item.labTestPatientDetails && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <User className="h-4 w-4" />
+                              <span>{item.labTestPatientDetails.name}</span>
+                            </div>
+                          )}
                         </div>
                       )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
 
-                      <Separator className="my-4" />
-
-                      <div className="flex justify-between text-lg font-bold">
-                        <span>Total</span>
-                        <span>₹{total}</span>
-                      </div>
-
-                      <Button className="mt-6 w-full" size="lg" asChild>
-                        <Link href="/checkout">Proceed to Checkout</Link>
-                      </Button>
-
-                      <div className="mt-4 text-center text-xs text-muted-foreground">
-                        By proceeding, you agree to our Terms & Conditions
-                      </div>
-                    </CardContent>
-                  </Card>
+        <div className="lg:col-span-1">
+          <Card className="sticky top-4">
+            <CardContent className="p-6">
+              <h2 className="text-xl font-bold mb-4">Order Summary</h2>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal ({totalItems} items)</span>
+                  <span className="font-medium">₹{totalPrice}</span>
+                </div>
+                
+                <Separator />
+                
+                <div className="flex justify-between text-lg font-bold">
+                  <span>Total</span>
+                  <span>₹{totalPrice}</span>
                 </div>
               </div>
-            </div>
-          )}
+
+              <Button 
+                className="w-full mt-6" 
+                size="lg"
+                onClick={() => router.push('/checkout')}
+              >
+                Proceed to Checkout
+              </Button>
+
+              <Button 
+                variant="outline" 
+                className="w-full mt-3"
+                onClick={() => router.push('/')}
+              >
+                Continue Shopping
+              </Button>
+            </CardContent>
+          </Card>
         </div>
-      </main>
-      <Footer />
+      </div>
     </div>
-  )
+  );
 }

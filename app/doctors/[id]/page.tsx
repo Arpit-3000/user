@@ -1,280 +1,297 @@
 "use client"
 
-import * as React from "react"
-import { use } from "react"
-import { useRouter } from "next/navigation"
-import { Navbar } from "@/components/navbar"
-import { Footer } from "@/components/footer"
+import { useState, useEffect } from "react"
+import { useParams, useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Spinner } from "@/components/ui/spinner"
+import { useToast } from "@/components/ui/use-toast"
 import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Star, Video, CalendarIcon, Award, GraduationCap, MapPin, ChevronLeft } from "lucide-react"
-import { format } from "date-fns"
-import { cn } from "@/lib/utils"
+import {
+  MapPin,
+  Phone,
+  Mail,
+  Briefcase,
+  GraduationCap,
+  Video,
+  Calendar,
+  Clock,
+  ArrowLeft,
+} from "lucide-react"
+import { getDoctors, getDoctorAvailability, type Doctor, type DoctorAvailability } from "@/lib/api/appointments"
 
-export default function DoctorDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
+const DAYS_OF_WEEK = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+export default function DoctorDetailPage() {
+  const params = useParams()
   const router = useRouter()
-  const [date, setDate] = React.useState<Date>()
-  const [selectedTimeSlot, setSelectedTimeSlot] = React.useState("")
-  const [consultationType, setConsultationType] = React.useState<"online" | "offline">("online")
+  const doctorId = params.id as string
+  const [doctor, setDoctor] = useState<Doctor | null>(null)
+  const [availability, setAvailability] = useState<DoctorAvailability[]>([])
+  const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
 
-  const doctor = {
-    id: resolvedParams.id,
-    name: "Dr. Priya Sharma",
-    specialization: "General Physician",
-    experience: 12,
-    rating: 4.8,
-    reviews: 340,
-    fee: 500,
-    image: "/female-doctor.png",
-    qualification: "MBBS, MD (Medicine)",
-    languages: ["English", "Hindi", "Marathi"],
-    clinicName: "HealthCare Clinic",
-    clinicAddress: "123 Main Street, Mumbai, Maharashtra 400001",
-    about:
-      "Dr. Priya Sharma is a highly experienced General Physician with over 12 years of practice. She specializes in treating common ailments, preventive care, and chronic disease management. Known for her patient-centric approach and thorough consultations.",
-    expertise: ["Diabetes Management", "Hypertension", "Respiratory Issues", "Digestive Problems", "Preventive Care"],
+  useEffect(() => {
+    if (doctorId) {
+      fetchDoctorDetails()
+      fetchDoctorAvailability()
+    }
+  }, [doctorId])
+
+  const fetchDoctorDetails = async () => {
+    try {
+      setLoading(true)
+      // Fetch all doctors and find the one with matching ID
+      const response = await getDoctors({ limit: 1000 })
+      
+      if (response.success && response.data.doctors.length > 0) {
+        // Try to find exact match by ID
+        const foundDoctor = response.data.doctors.find((d: Doctor) => d._id === doctorId)
+        if (foundDoctor) {
+          setDoctor(foundDoctor)
+        } else {
+          toast({
+            title: "Error",
+            description: "Doctor not found",
+            variant: "destructive",
+          })
+          router.push("/doctors")
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: "Doctor not found",
+          variant: "destructive",
+        })
+        router.push("/doctors")
+      }
+    } catch (error) {
+      console.error("Error fetching doctor details:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load doctor details",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const timeSlots = {
-    morning: ["09:00 AM", "09:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM"],
-    afternoon: ["02:00 PM", "02:30 PM", "03:00 PM", "03:30 PM", "04:00 PM", "04:30 PM"],
-    evening: ["05:00 PM", "05:30 PM", "06:00 PM", "06:30 PM", "07:00 PM"],
+  const fetchDoctorAvailability = async () => {
+    try {
+      const response = await getDoctorAvailability(doctorId)
+      if (response.success) {
+        setAvailability(response.data || [])
+      }
+    } catch (error) {
+      console.error("Error fetching availability:", error)
+    }
+  }
+
+  const getConsultationBadge = (type: string) => {
+    if (type === "online" || type === "both") {
+      return (
+        <Badge variant="secondary" className="gap-1">
+          <Video className="h-3 w-3" />
+          {type === "both" ? "Online & Offline" : "Online"}
+        </Badge>
+      )
+    }
+    return (
+      <Badge variant="outline" className="gap-1">
+        <MapPin className="h-3 w-3" />
+        In-Clinic Only
+      </Badge>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="container px-4 py-8 md:px-6">
+        <div className="flex items-center justify-center py-12">
+          <Spinner className="h-8 w-8" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!doctor) {
+    return (
+      <div className="container px-4 py-8 md:px-6">
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center p-12 text-center">
+            <h2 className="mb-2 text-xl font-semibold">Doctor not found</h2>
+            <p className="mb-6 text-muted-foreground">The doctor you're looking for doesn't exist</p>
+            <Button asChild>
+              <Link href="/doctors">Back to Doctors</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
-      <main className="flex-1">
-        <div className="container px-4 py-8 md:px-6">
-          <Button variant="ghost" size="sm" className="mb-4 -ml-2" onClick={() => router.back()}>
-            <ChevronLeft className="mr-1 h-4 w-4" />
-            Back
-          </Button>
+    <div className="container px-4 py-8 md:px-6">
+      <Button variant="ghost" className="mb-6" asChild>
+        <Link href="/doctors">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Doctors
+        </Link>
+      </Button>
 
-          <div className="grid gap-8 lg:grid-cols-3">
-            <div className="lg:col-span-2 space-y-6">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex flex-col gap-6 sm:flex-row">
-                    <Avatar className="h-24 w-24">
-                      <AvatarImage src={doctor.image || "/placeholder.svg"} alt={doctor.name} />
-                      <AvatarFallback>
-                        {doctor.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                      </AvatarFallback>
-                    </Avatar>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Doctor Info Card */}
+        <div className="lg:col-span-2">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex flex-col gap-6 sm:flex-row">
+                <Avatar className="h-32 w-32 shrink-0">
+                  <AvatarImage src={doctor.profileImage || "/placeholder.svg"} alt={doctor.name} />
+                  <AvatarFallback className="text-2xl">
+                    {doctor.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")}
+                  </AvatarFallback>
+                </Avatar>
 
-                    <div className="flex-1">
-                      <h1 className="text-2xl font-bold">{doctor.name}</h1>
-                      <p className="mt-1 text-lg text-muted-foreground">{doctor.specialization}</p>
-
-                      <div className="mt-4 flex flex-wrap gap-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <GraduationCap className="h-4 w-4 text-primary" />
-                          <span>{doctor.qualification}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Award className="h-4 w-4 text-primary" />
-                          <span>{doctor.experience} years experience</span>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex items-center gap-4">
-                        <div className="flex items-center gap-1">
-                          <Star className="h-5 w-5 fill-primary text-primary" />
-                          <span className="font-medium">{doctor.rating}</span>
-                          <span className="text-sm text-muted-foreground">({doctor.reviews} reviews)</span>
-                        </div>
-                        <div className="flex gap-2">
-                          <Badge>Video Consultation</Badge>
-                          <Badge variant="outline">In-Clinic</Badge>
-                        </div>
-                      </div>
-                    </div>
+                <div className="flex-1">
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <h1 className="text-2xl font-bold">{doctor.name}</h1>
+                    {getConsultationBadge(doctor.consultationType)}
                   </div>
 
-                  <Separator className="my-6" />
-
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="mb-2 font-semibold">Languages</h3>
-                      <div className="flex gap-2">
-                        {doctor.languages.map((lang) => (
-                          <Badge key={lang} variant="secondary">
-                            {lang}
-                          </Badge>
-                        ))}
-                      </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Briefcase className="h-4 w-4" />
+                      <span className="font-medium">{doctor.specialization}</span>
                     </div>
 
-                    <div>
-                      <h3 className="mb-2 font-semibold">Clinic Details</h3>
-                      <p className="font-medium">{doctor.clinicName}</p>
-                      <div className="mt-1 flex items-start gap-2 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <GraduationCap className="h-4 w-4" />
+                      <span>{doctor.qualification}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Clock className="h-4 w-4" />
+                      <span>{doctor.experience}</span>
+                    </div>
+
+                    {doctor.contact && (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Phone className="h-4 w-4" />
+                        <span>{doctor.contact}</span>
+                      </div>
+                    )}
+
+                    {doctor.email && (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Mail className="h-4 w-4" />
+                        <span>{doctor.email}</span>
+                      </div>
+                    )}
+
+                    {doctor.address && (
+                      <div className="flex items-start gap-2 text-muted-foreground">
                         <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
-                        <span>{doctor.clinicAddress}</span>
+                        <span>
+                          {doctor.address.street}, {doctor.address.city}, {doctor.address.state} -{" "}
+                          {doctor.address.pincode}
+                        </span>
                       </div>
-                    </div>
+                    )}
                   </div>
-                </CardContent>
-              </Card>
 
-              <Tabs defaultValue="about" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="about">About</TabsTrigger>
-                  <TabsTrigger value="expertise">Expertise</TabsTrigger>
-                </TabsList>
+                  <Separator className="my-4" />
 
-                <TabsContent value="about" className="mt-6">
-                  <Card>
-                    <CardContent className="p-6">
-                      <h3 className="mb-4 text-lg font-semibold">About Doctor</h3>
-                      <p className="leading-relaxed text-muted-foreground">{doctor.about}</p>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                <TabsContent value="expertise" className="mt-6">
-                  <Card>
-                    <CardContent className="p-6">
-                      <h3 className="mb-4 text-lg font-semibold">Areas of Expertise</h3>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {doctor.expertise.map((area) => (
-                          <div key={area} className="flex items-center gap-2">
-                            <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                            <span>{area}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              </Tabs>
-            </div>
-
-            <div className="lg:col-span-1">
-              <div className="sticky top-20">
-                <Card>
-                  <CardContent className="p-6">
-                    <h2 className="mb-4 text-xl font-bold">Book Appointment</h2>
-
-                    <form className="space-y-6">
-                      <div className="space-y-2">
-                        <Label>Consultation Type</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant={consultationType === "online" ? "default" : "outline"}
-                            className="justify-start"
-                            onClick={() => setConsultationType("online")}
-                          >
-                            <Video className="mr-2 h-4 w-4" />
-                            Online
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={consultationType === "offline" ? "default" : "outline"}
-                            className="justify-start"
-                            onClick={() => setConsultationType("offline")}
-                          >
-                            <MapPin className="mr-2 h-4 w-4" />
-                            In-Clinic
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Select Date</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                "w-full justify-start text-left font-normal",
-                                !date && "text-muted-foreground",
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {date ? format(date, "PPP") : "Pick a date"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={date}
-                              onSelect={setDate}
-                              disabled={(date) => date < new Date() || date < new Date("1900-01-01")}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Select Time Slot</Label>
-                        <div className="space-y-3">
-                          {Object.entries(timeSlots).map(([period, slots]) => (
-                            <div key={period}>
-                              <div className="mb-2 text-xs font-medium uppercase text-muted-foreground">{period}</div>
-                              <div className="grid grid-cols-3 gap-2">
-                                {slots.map((slot) => (
-                                  <Button
-                                    key={slot}
-                                    type="button"
-                                    size="sm"
-                                    variant={selectedTimeSlot === slot ? "default" : "outline"}
-                                    onClick={() => setSelectedTimeSlot(slot)}
-                                  >
-                                    {slot}
-                                  </Button>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="patient-name">Patient Name</Label>
-                        <Input id="patient-name" placeholder="Enter patient name" />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="symptoms">Symptoms (Optional)</Label>
-                        <Textarea id="symptoms" placeholder="Describe your symptoms..." rows={3} />
-                      </div>
-
-                      <Separator />
-
-                      <div className="flex items-center justify-between text-lg font-bold">
-                        <span>Consultation Fee</span>
-                        <span>₹{doctor.fee}</span>
-                      </div>
-
-                      <Button className="w-full" size="lg" type="submit">
-                        Book Appointment - ₹{doctor.fee}
-                      </Button>
-                    </form>
-                  </CardContent>
-                </Card>
+                  <div>
+                    <h3 className="mb-2 font-semibold">About</h3>
+                    <p className="text-muted-foreground">{doctor.bio || "No bio available"}</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
+
+          {/* Availability Card */}
+          {availability.length > 0 && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Availability Schedule</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {availability
+                    .filter((slot) => slot.isActive)
+                    .sort((a, b) => {
+                      const dayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                      return dayOrder.indexOf(a.dayOfWeek) - dayOrder.indexOf(b.dayOfWeek)
+                    })
+                    .map((slot) => (
+                      <div key={slot._id} className="rounded-lg border p-3">
+                        <div className="flex items-center gap-3 mb-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">{slot.dayOfWeek}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 ml-7">
+                          {slot.timeSlots
+                            .filter((ts) => ts.isAvailable)
+                            .map((ts) => (
+                              <Badge key={ts._id} variant="secondary" className="text-xs">
+                                {ts.startTime} - {ts.endTime}
+                              </Badge>
+                            ))}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
-      </main>
-      <Footer />
+
+        {/* Booking Card */}
+        <div className="lg:col-span-1">
+          <Card className="sticky top-6">
+            <CardContent className="p-6">
+              <div className="mb-6">
+                <div className="text-sm text-muted-foreground">Consultation Fee</div>
+                <div className="text-3xl font-bold">₹{doctor.fee}</div>
+              </div>
+
+              <Button className="w-full" size="lg" asChild>
+                <Link href={`/appointments/book/${doctor._id}`}>
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Book Appointment
+                </Link>
+              </Button>
+
+              <Separator className="my-6" />
+
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Consultation Type</span>
+                  <span className="font-medium capitalize">{doctor.consultationType}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Experience</span>
+                  <span className="font-medium">{doctor.experience}</span>
+                </div>
+                {availability.length > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Available Days</span>
+                    <span className="font-medium">{availability.filter((s) => s.isActive).length} days/week</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   )
 }

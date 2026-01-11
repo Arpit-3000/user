@@ -2,8 +2,6 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Navbar } from "@/components/navbar"
-import { Footer } from "@/components/footer"
 import { isAuthenticated } from "@/lib/auth-utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -82,6 +80,7 @@ export default function ProfilePage() {
   const loadProfile = async () => {
     try {
       const data = await profileApi.get()
+      console.log("Profile data loaded:", data) // Debug log
       setProfile(data)
       setProfileForm({
         firstName: data.firstName || "",
@@ -181,42 +180,84 @@ export default function ProfilePage() {
       return
     }
 
+    setUpdating(true)
     try {
       const result = await profileApi.uploadProfileImage(file)
+      console.log("Image upload result:", result) // Debug log
       if (result.success) {
         toast({
           title: "Success",
           description: "Profile image updated successfully",
         })
-        loadProfile()
+        // Update profile state immediately with new image
+        setProfile((prev: any) => ({
+          ...prev,
+          profileImage: result.profileImage || result.user?.profileImage,
+        }))
+        // Also update localStorage
+        const user = JSON.parse(localStorage.getItem("user") || "{}")
+        user.profileImage = result.profileImage || result.user?.profileImage
+        localStorage.setItem("user", JSON.stringify(user))
+        // Reload full profile
+        await loadProfile()
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to upload image",
+          variant: "destructive",
+        })
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Image upload error:", error)
       toast({
         title: "Error",
-        description: "Failed to upload image",
+        description: error.message || "Failed to upload image",
         variant: "destructive",
       })
+    } finally {
+      setUpdating(false)
     }
   }
 
   const handleDeleteImage = async () => {
     if (!confirm("Are you sure you want to delete your profile image?")) return
 
+    setUpdating(true)
     try {
       const result = await profileApi.deleteProfileImage()
+      console.log("Image delete result:", result) // Debug log
       if (result.success) {
         toast({
           title: "Success",
           description: "Profile image deleted successfully",
         })
-        loadProfile()
+        // Update profile state immediately
+        setProfile((prev: any) => ({
+          ...prev,
+          profileImage: null,
+        }))
+        // Also update localStorage
+        const user = JSON.parse(localStorage.getItem("user") || "{}")
+        user.profileImage = null
+        localStorage.setItem("user", JSON.stringify(user))
+        // Reload full profile
+        await loadProfile()
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to delete image",
+          variant: "destructive",
+        })
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Image delete error:", error)
       toast({
         title: "Error",
-        description: "Failed to delete image",
+        description: error.message || "Failed to delete image",
         variant: "destructive",
       })
+    } finally {
+      setUpdating(false)
     }
   }
 
@@ -301,15 +342,11 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col">
-        <Navbar />
-        <main className="flex-1 flex items-center justify-center">
+      <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
             <p className="mt-4 text-muted-foreground">Loading profile...</p>
           </div>
-        </main>
-        <Footer />
       </div>
     )
   }
@@ -324,10 +361,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
-      <main className="flex-1">
-        <div className="container px-4 py-8 md:px-6">
+    <div className="container px-4 py-8 md:px-6">
           <div className="mb-8">
             <h1 className="text-3xl font-bold">My Profile</h1>
             <p className="mt-2 text-muted-foreground">Manage your account and preferences</p>
@@ -339,12 +373,17 @@ export default function ProfilePage() {
                 <div className="flex flex-col items-center text-center">
                   <div className="relative">
                     <Avatar className="h-24 w-24">
-                      <AvatarImage src={profile?.profileImage || "/placeholder-user.jpg"} />
-                      <AvatarFallback>{getInitials(profile?.name || "User")}</AvatarFallback>
+                      <AvatarImage 
+                        src={profile?.profileImage || "/placeholder-user.jpg"} 
+                        alt={profile?.name || "User"}
+                        className="object-cover"
+                      />
+                      <AvatarFallback className="text-2xl">{getInitials(profile?.name || "User")}</AvatarFallback>
                     </Avatar>
                     <label
                       htmlFor="profile-image"
-                      className="absolute bottom-0 right-0 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+                      className="absolute bottom-0 right-0 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                      title="Upload profile image"
                     >
                       <Upload className="h-4 w-4" />
                       <input
@@ -353,23 +392,29 @@ export default function ProfilePage() {
                         accept="image/jpeg,image/png,image/webp"
                         className="hidden"
                         onChange={handleImageUpload}
+                        disabled={updating}
                       />
                     </label>
                   </div>
                   <h2 className="mt-4 text-xl font-bold">{profile?.name || "User"}</h2>
                   <p className="text-sm text-muted-foreground">{profile?.email}</p>
                   <Badge className="mt-3">Verified Account</Badge>
-
-                  {profile?.profileImage && (
+                  
+                  {profile?.profileImage && profile.profileImage !== "/placeholder-user.jpg" && (
                     <Button
                       variant="outline"
                       size="sm"
                       className="mt-3"
                       onClick={handleDeleteImage}
+                      disabled={updating}
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
                       Remove Photo
                     </Button>
+                  )}
+                  
+                  {updating && (
+                    <p className="mt-2 text-xs text-muted-foreground">Uploading...</p>
                   )}
                 </div>
 
@@ -795,8 +840,5 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
-      </main>
-      <Footer />
-    </div>
   )
 }

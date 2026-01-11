@@ -1,7 +1,65 @@
-import { API_BASE_URL, handleApiError } from "../api-config"
+import { API_BASE_URL, getAuthHeaders, handleApiError } from "../api-config"
+
+export interface Medicine {
+  _id: string
+  productName: string
+  genericName: string
+  brandName: string
+  manufacturer: string
+  category: string
+  prescriptionRequired: boolean
+  composition: {
+    activeIngredients: Array<{
+      name: string
+      strength: string
+    }>
+    inactiveIngredients?: string[]
+  }
+  dosage: {
+    form: string
+    strength: string
+    route: string
+    frequency?: string
+  }
+  pricing: {
+    mrp: number
+    sellingPrice: number
+    discount: number
+    gst?: number
+  }
+  stock: {
+    quantity: number
+    unit: string
+    lowStockThreshold: number
+    inStock?: boolean
+  }
+  packaging: {
+    packSize: string
+    packType?: string
+    expiryDate: string
+  }
+  images: string[]
+  description: string
+  usageInstructions: string
+  sideEffects: string
+  warnings: string
+  contraindications?: string
+  storageConditions?: string
+  regulatory?: {
+    drugLicenseNumber: string
+    scheduleType: string
+  }
+  additionalFeatures?: {
+    fastActing?: boolean
+    sugarFree?: boolean
+    glutenFree?: boolean
+  }
+  createdAt: string
+  updatedAt: string
+}
 
 export const medicinesApi = {
-  getAll: async (params?: { page?: number; limit?: number; category?: string; search?: string }) => {
+  getAll: async (params?: { category?: string; prescriptionRequired?: boolean }) => {
     try {
       const queryString = new URLSearchParams(params as any).toString()
       const response = await fetch(`${API_BASE_URL}/medicines?${queryString}`)
@@ -11,9 +69,51 @@ export const medicinesApi = {
     }
   },
 
+  getAllWithSort: async (sortBy: string = "newest") => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/medicines/public?sortBy=${sortBy}`)
+      return await response.json()
+    } catch (error) {
+      return handleApiError(error)
+    }
+  },
+
   getById: async (id: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/medicines/${id}`)
+      const response = await fetch(`${API_BASE_URL}/medicines/${id}`, {
+        headers: getAuthHeaders(),
+      })
+      return await response.json()
+    } catch (error) {
+      return handleApiError(error)
+    }
+  },
+
+  searchByName: async (name: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/medicines/name/${encodeURIComponent(name)}`, {
+        headers: getAuthHeaders(),
+      })
+      return await response.json()
+    } catch (error) {
+      return handleApiError(error)
+    }
+  },
+
+  searchByGeneric: async (genericName: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/medicines/generic/${encodeURIComponent(genericName)}`, {
+        headers: getAuthHeaders(),
+      })
+      return await response.json()
+    } catch (error) {
+      return handleApiError(error)
+    }
+  },
+
+  checkPrescription: async (id: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/medicines/check-prescription/${id}`)
       return await response.json()
     } catch (error) {
       return handleApiError(error)

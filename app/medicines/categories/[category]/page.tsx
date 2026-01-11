@@ -4,8 +4,6 @@ import * as React from "react"
 import { use } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Navbar } from "@/components/navbar"
-import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
@@ -149,10 +147,7 @@ export default function MedicineCategoryPage({ params }: { params: Promise<{ cat
   ]
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
-      <main className="flex-1">
-        <div className="container px-4 py-8 md:px-6">
+    <div className="container px-4 py-8 md:px-6">
           {/* Breadcrumb */}
           <div className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
             <Link href="/" className="hover:text-foreground">
@@ -314,8 +309,5 @@ export default function MedicineCategoryPage({ params }: { params: Promise<{ cat
             </div>
           </div>
         </div>
-      </main>
-      <Footer />
-    </div>
   )
 }

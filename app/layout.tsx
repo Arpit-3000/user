@@ -1,46 +1,38 @@
+"use client"
+
 import type React from "react"
-import type { Metadata } from "next"
 import { Inter } from "next/font/google"
+import { usePathname } from "next/navigation"
 import { Analytics } from "@vercel/analytics/next"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
+import { Navbar } from "@/components/navbar"
+import { Footer } from "@/components/footer"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
-
-export const metadata: Metadata = {
-  title: "ArogyaRx - Your Healthcare Partner",
-  description: "Buy medicines, book lab tests, and consult with doctors online",
-  generator: "v0.app",
-  icons: {
-    icon: [
-      {
-        url: "/icon-light-32x32.png",
-        media: "(prefers-color-scheme: light)",
-      },
-      {
-        url: "/icon-dark-32x32.png",
-        media: "(prefers-color-scheme: dark)",
-      },
-      {
-        url: "/icon.svg",
-        type: "image/svg+xml",
-      },
-    ],
-    apple: "/apple-icon.png",
-  },
-}
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const pathname = usePathname()
+  
+  // Hide navbar and footer on auth pages
+  const isAuthPage = pathname?.startsWith("/login") || pathname?.startsWith("/register")
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} font-sans antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          {children}
+          <div className="flex min-h-screen flex-col">
+            {!isAuthPage && <Navbar />}
+            <main className="flex-1">
+              {children}
+            </main>
+            {!isAuthPage && <Footer />}
+          </div>
           <Toaster />
         </ThemeProvider>
         <Analytics />

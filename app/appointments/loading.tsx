@@ -3,10 +3,7 @@ import { Card, CardContent } from "@/components/ui/card"
 
 export default function Loading() {
   return (
-    <div className="flex min-h-screen flex-col">
-      <div className="h-16 border-b" />
-      <main className="flex-1">
-        <div className="container px-4 py-8 md:px-6">
+    <div className="container px-4 py-8 md:px-6">
           <Skeleton className="mb-8 h-10 w-64" />
 
           <div className="mb-6">
@@ -30,7 +27,5 @@ export default function Loading() {
             ))}
           </div>
         </div>
-      </main>
-    </div>
   )
 }
