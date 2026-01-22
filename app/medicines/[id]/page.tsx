@@ -67,12 +67,19 @@ export default function MedicineDetailPage() {
     setLoading(true)
     try {
       const response = await medicinesApi.getById(id)
-      console.log("Medicine API response:", response) // Debug log
+      console.log("=== MEDICINE API RESPONSE ===");
+      console.log("Full Response:", response);
+      console.log("Response Data:", response?.data);
+      console.log("Direct Response:", response);
+      console.log("============================");
       
       // Handle both response formats: direct data or wrapped in success/data
       const medicineData = response?.data || response
-      console.log("Medicine data:", medicineData) // Debug log
-      console.log("Stock info:", medicineData?.stock) // Debug log
+      console.log("=== PROCESSED MEDICINE DATA ===");
+      console.log("Medicine Data:", medicineData);
+      console.log("Stock:", medicineData?.stock);
+      console.log("Stock Quantity:", medicineData?.stock?.quantity);
+      console.log("===============================");
       
       setMedicine(medicineData)
     } catch (error) {
@@ -204,19 +211,24 @@ export default function MedicineDetailPage() {
     )
   }
 
-  // Check stock availability - handle multiple formats
-  const stockQuantity = medicine.stock?.quantity ?? 0
-  const stockAvailable = medicine.stock?.available ?? true
-  const stockInStock = medicine.stock?.inStock ?? (stockQuantity > 0)
-  const inStock = stockAvailable && (stockQuantity > 0 || stockInStock)
+  // Check stock availability - simple check matching list page
+  const stockData = medicine.stock || {}
+  const stockQuantity = stockData.quantity ?? 0
+  
+  // Medicine is in stock if quantity is greater than 0
+  // Negative quantities are treated as out of stock
+  const inStock = stockQuantity > 0
 
-  console.log("Medicine stock check:", {
-    quantity: stockQuantity,
-    available: stockAvailable,
-    inStock: stockInStock,
-    finalInStock: inStock,
-    rawStock: medicine.stock
-  }) // Debug log
+  // Debug logging
+  if (typeof window !== 'undefined') {
+    console.log("=== MEDICINE DETAIL STOCK CHECK ===");
+    console.log("Medicine:", medicine.productName);
+    console.log("Stock Data:", stockData);
+    console.log("Stock Quantity:", stockQuantity);
+    console.log("In Stock:", inStock);
+    console.log("Note: Negative stock is treated as out of stock");
+    console.log("===================================");
+  }
 
   return (
     <div className="container px-4 py-8 md:px-6">
@@ -341,12 +353,14 @@ export default function MedicineDetailPage() {
               <div>
                 {inStock ? (
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="bg-green-100 text-green-800">
+                    <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
                       In Stock
                     </Badge>
-                    <span className="text-sm text-muted-foreground">
-                      {stockQuantity} {medicine.stock?.unit || 'units'} available
-                    </span>
+                    {stockQuantity > 0 && (
+                      <span className="text-sm text-muted-foreground">
+                        {stockQuantity} {stockData.unit || 'units'} available
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <Badge variant="destructive">Currently Unavailable</Badge>
@@ -382,7 +396,7 @@ export default function MedicineDetailPage() {
                       {addingToCart ? (
                         <Loader2 className="h-5 w-5 animate-spin" />
                       ) : (
-                        `${cartQuantity} in cart`
+                        cartQuantity
                       )}
                     </div>
                     <Button

@@ -84,6 +84,15 @@ export default function OrdersPage() {
     return statusMap[status] || 'bg-gray-100 text-gray-800';
   };
 
+  const formatPaymentMethod = (method: string) => {
+    // If method already contains details (e.g., "UPI (user@paytm)"), return as is
+    if (method && (method.includes('(') || method.includes('*'))) {
+      return method;
+    }
+    // Otherwise return the basic method
+    return method || 'N/A';
+  };
+
   const filterOrdersByStatus = (status: string) => {
     // Filtering is now done server-side, so just return all orders
     return orders;
@@ -273,7 +282,7 @@ export default function OrdersPage() {
                         <div>
                           <p className="text-sm text-muted-foreground">Payment</p>
                           <div className="flex items-center gap-2">
-                            <span className="font-medium">{order.paymentMethod}</span>
+                            <span className="font-medium">{formatPaymentMethod(order.paymentMethod)}</span>
                             <Badge className={getPaymentStatusColor(order.paymentStatus)}>
                               {order.paymentStatus}
                             </Badge>

@@ -66,7 +66,9 @@ export async function createOrderPayment(data: CreateOrderPaymentRequest): Promi
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/payment/orders/create-payment`, {
+  console.log('Creating order payment with data:', data);
+
+  const response = await fetch(`${API_BASE_URL}/payments/orders/create-payment`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -76,6 +78,12 @@ export async function createOrderPayment(data: CreateOrderPaymentRequest): Promi
   });
 
   const result = await response.json();
+  
+  console.log('Create payment response:', {
+    status: response.status,
+    ok: response.ok,
+    result
+  });
 
   if (!response.ok) {
     throw new Error(result.message || result.error || 'Failed to create payment order');
@@ -94,7 +102,7 @@ export async function createAppointmentPayment(data: CreateAppointmentPaymentReq
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/payment/create-appointment`, {
+  const response = await fetch(`${API_BASE_URL}/payments/create-appointment`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -122,7 +130,7 @@ export async function verifyPayment(data: VerifyPaymentRequest): Promise<VerifyP
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/payment/verify`, {
+  const response = await fetch(`${API_BASE_URL}/payments/verify`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -150,7 +158,7 @@ export async function handlePaymentFailure(data: PaymentFailureRequest): Promise
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/payment/failure`, {
+  const response = await fetch(`${API_BASE_URL}/payments/failure`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -175,14 +183,39 @@ export function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
     // Check if script already loaded
     if (typeof window !== 'undefined' && (window as any).Razorpay) {
+      console.log('Razorpay already loaded');
       resolve(true);
       return;
     }
 
+    // Check if script tag already exists
+    const existingScript = document.querySelector('script[src*="razorpay"]');
+    if (existingScript) {
+      console.log('Razorpay script tag exists, waiting for load...');
+      // Wait a bit for it to load
+      setTimeout(() => {
+        if ((window as any).Razorpay) {
+          console.log('Razorpay loaded from existing script');
+          resolve(true);
+        } else {
+          console.error('Razorpay script exists but not loaded');
+          resolve(false);
+        }
+      }, 1000);
+      return;
+    }
+
+    console.log('Loading Razorpay script...');
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
+    script.onload = () => {
+      console.log('Razorpay script loaded successfully');
+      resolve(true);
+    };
+    script.onerror = (error) => {
+      console.error('Failed to load Razorpay script:', error);
+      resolve(false);
+    };
     document.body.appendChild(script);
   });
 }
@@ -196,10 +229,22 @@ export async function initiateRazorpayPayment(
   onSuccess: (verifyResult: VerifyPaymentResponse) => void,
   onFailure: (error: string) => void
 ): Promise<void> {
+  console.log('Initiating Razorpay payment with data:', paymentData);
+  
   const scriptLoaded = await loadRazorpayScript();
 
   if (!scriptLoaded) {
+    console.error('Razorpay script failed to load');
     onFailure('Razorpay SDK failed to load. Please check your internet connection.');
+    return;
+  }
+
+  console.log('Razorpay script loaded successfully');
+
+  // Check if Razorpay is available
+  if (typeof window === 'undefined' || !(window as any).Razorpay) {
+    console.error('Razorpay not available on window object');
+    onFailure('Razorpay SDK not available. Please refresh the page.');
     return;
   }
 
@@ -211,6 +256,7 @@ export async function initiateRazorpayPayment(
     description: 'orderNumber' in paymentData ? `Order ${paymentData.orderNumber}` : 'Appointment Booking',
     order_id: paymentData.razorpayOrderId,
     handler: async function (response: any) {
+      console.log('Razorpay payment successful:', response);
       try {
         // Verify payment
         const verifyResult = await verifyPayment({
@@ -219,17 +265,21 @@ export async function initiateRazorpayPayment(
           razorpay_signature: response.razorpay_signature,
         });
 
+        console.log('Payment verification result:', verifyResult);
+
         if (verifyResult.success) {
           onSuccess(verifyResult);
         } else {
           onFailure('Payment verification failed');
         }
       } catch (error: any) {
+        console.error('Payment verification error:', error);
         onFailure(error.message || 'Payment verification failed');
       }
     },
     modal: {
       ondismiss: async function () {
+        console.log('Razorpay modal dismissed by user');
         try {
           // Handle payment cancellation
           await handlePaymentFailure({
@@ -252,6 +302,14 @@ export async function initiateRazorpayPayment(
     },
   };
 
-  const razorpay = new (window as any).Razorpay(options);
-  razorpay.open();
+  console.log('Opening Razorpay modal with options:', options);
+
+  try {
+    const razorpay = new (window as any).Razorpay(options);
+    razorpay.open();
+    console.log('Razorpay modal opened successfully');
+  } catch (error) {
+    console.error('Error opening Razorpay modal:', error);
+    onFailure('Failed to open payment modal. Please try again.');
+  }
 }

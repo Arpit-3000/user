@@ -238,43 +238,62 @@ export default function CheckoutPage() {
 
       // Handle payment based on method
       if (paymentMethod === 'Online') {
-        // Create Razorpay payment order
-        const paymentData = await createOrderPayment({
-          cartId,
-          address: addressString,
-          contact,
-        });
+        try {
+          console.log('Creating Razorpay payment order with payload:', {
+            cartId,
+            address: addressString,
+            contact,
+          });
 
-        const user = getUser();
+          // Create Razorpay payment order
+          const paymentData = await createOrderPayment({
+            cartId,
+            address: addressString,
+            contact,
+          });
 
-        // Initiate Razorpay payment
-        await initiateRazorpayPayment(
-          paymentData,
-          {
-            name: user?.name || 'User',
-            email: user?.email || '',
-            contact: contact,
-          },
-          (verifyResult) => {
-            // Payment success
-            toast({
-              title: 'Success',
-              description: 'Payment successful! Order placed.',
-            });
-            // Use the order ID from verification result
-            const orderId = verifyResult.order?.id || verifyResult.order?._id || paymentData.orderId;
-            router.push(`/orders/${orderId}`);
-          },
-          (error) => {
-            // Payment failure
-            toast({
-              title: 'Payment Failed',
-              description: error,
-              variant: 'destructive',
-            });
-            setPlacing(false);
-          }
-        );
+          console.log('Payment order created successfully:', paymentData);
+
+          const user = getUser();
+
+          // Initiate Razorpay payment
+          await initiateRazorpayPayment(
+            paymentData,
+            {
+              name: user?.name || 'User',
+              email: user?.email || '',
+              contact: contact,
+            },
+            (verifyResult) => {
+              // Payment success
+              toast({
+                title: 'Success',
+                description: 'Payment successful! Order placed.',
+              });
+              // Use the order ID from verification result
+              const orderId = verifyResult.order?.id || verifyResult.order?._id || paymentData.orderId;
+              router.push(`/orders/${orderId}`);
+            },
+            (error) => {
+              // Payment failure
+              console.error('Payment failed:', error);
+              toast({
+                title: 'Payment Failed',
+                description: error,
+                variant: 'destructive',
+              });
+              setPlacing(false);
+            }
+          );
+        } catch (error: any) {
+          console.error('Error in online payment flow:', error);
+          toast({
+            title: 'Payment Error',
+            description: error.message || 'Failed to initiate payment',
+            variant: 'destructive',
+          });
+          setPlacing(false);
+        }
       } else {
         // COD - Place order directly
         const orderData: any = {

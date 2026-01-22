@@ -493,7 +493,7 @@ export default function MedicinesPage() {
                         {medicine.pricing.discount > 0 && (
                           <Badge className="absolute top-2 left-2 bg-primary">{medicine.pricing.discount}% OFF</Badge>
                         )}
-                        {medicine.stock.quantity === 0 && (
+                        {medicine.stock.quantity <= 0 && (
                           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
                             <Badge variant="destructive">Out of Stock</Badge>
                           </div>
@@ -555,7 +555,7 @@ export default function MedicinesPage() {
                       <Button
                         className="w-full"
                         size="sm"
-                        disabled={medicine.stock.quantity === 0 || addingToCart === medicine._id}
+                        disabled={medicine.stock.quantity <= 0 || addingToCart === medicine._id}
                         onClick={() => handleAddToCart(medicine)}
                       >
                         {addingToCart === medicine._id ? (
@@ -563,7 +563,7 @@ export default function MedicinesPage() {
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             Adding...
                           </>
-                        ) : medicine.stock.quantity === 0 ? (
+                        ) : medicine.stock.quantity <= 0 ? (
                           "Out of Stock"
                         ) : (
                           <>
@@ -590,7 +590,7 @@ export default function MedicinesPage() {
                             alt={medicine.productName}
                             className="h-full w-full object-cover"
                           />
-                          {medicine.stock.quantity === 0 && (
+                          {medicine.stock.quantity <= 0 && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/50">
                               <Badge variant="destructive" className="text-xs">Out</Badge>
                             </div>
@@ -661,7 +661,7 @@ export default function MedicinesPage() {
                           ) : (
                             <Button
                               size="sm"
-                              disabled={medicine.stock.quantity === 0 || addingToCart === medicine._id}
+                              disabled={medicine.stock.quantity <= 0 || addingToCart === medicine._id}
                               onClick={() => handleAddToCart(medicine)}
                             >
                               {addingToCart === medicine._id ? (
@@ -669,7 +669,7 @@ export default function MedicinesPage() {
                                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                   Adding...
                                 </>
-                              ) : medicine.stock.quantity === 0 ? (
+                              ) : medicine.stock.quantity <= 0 ? (
                                 "Out of Stock"
                               ) : (
                                 <>
