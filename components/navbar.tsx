@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
@@ -70,7 +71,7 @@ export function Navbar() {
 
       setSearchLoading(true)
       try {
-        const data = await searchApi.search(searchQuery, { limit: 4 })
+        const data = await searchApi.search(searchQuery, { limit: 10, page: 1 })
         if (data.success) {
           setSearchResults(data.results)
           setShowSearchResults(true)
@@ -140,12 +141,28 @@ export function Navbar() {
   const getTotalResults = () => {
     if (!searchResults) return 0
     return (
-      searchResults.medicines.count +
-      searchResults.labTests.count +
-      searchResults.categoryProducts.count +
-      searchResults.categories.count +
-      searchResults.doctors.count
+      (searchResults.medicines?.total || 0) +
+      (searchResults.labTests?.total || 0) +
+      (searchResults.categoryProducts?.total || 0) +
+      (searchResults.categories?.total || 0) +
+      (searchResults.doctors?.total || 0)
     )
+  }
+
+  const hasMoreResults = () => {
+    if (!searchResults) return false
+    return (
+      searchResults.medicines?.hasMore ||
+      searchResults.labTests?.hasMore ||
+      searchResults.categoryProducts?.hasMore ||
+      searchResults.categories?.hasMore ||
+      searchResults.doctors?.hasMore
+    )
+  }
+
+  const handleViewAll = () => {
+    setShowSearchResults(false)
+    router.push(`/search?q=${encodeURIComponent(searchQuery)}`)
   }
 
   const clearSearch = () => {
@@ -220,10 +237,22 @@ export function Navbar() {
 
               {/* Search Results Dropdown */}
               {showSearchResults && searchResults && getTotalResults() > 0 && (
-                <Card className="absolute z-50 mt-2 w-full max-h-[400px] overflow-y-auto shadow-xl">
+                <Card className="absolute z-50 mt-2 w-full max-h-[500px] overflow-y-auto shadow-xl">
                   <div className="p-2">
-                    <div className="px-2 py-1 text-xs text-muted-foreground">
-                      {getTotalResults()} results
+                    <div className="flex items-center justify-between px-2 py-1 mb-1">
+                      <span className="text-xs text-muted-foreground">
+                        Showing {Math.min(10, getTotalResults())} of {getTotalResults()} results
+                      </span>
+                      {(getTotalResults() > 10 || hasMoreResults()) && (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0 text-xs"
+                          onClick={handleViewAll}
+                        >
+                          View All →
+                        </Button>
+                      )}
                     </div>
 
                     {/* Medicines */}
@@ -448,66 +477,122 @@ export function Navbar() {
                 <span className="sr-only">Toggle menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[300px] sm:w-[400px]">
-              <nav className="flex flex-col gap-4">
+            <SheetContent side="right" className="w-[320px] sm:w-[400px] p-0">
+              <div className="flex flex-col h-full">
                 {authenticated ? (
                   <>
-                    <div className="flex items-center gap-3 pb-4 border-b">
-                      <Avatar className="h-12 w-12">
-                        <AvatarImage 
-                          src={user?.profileImage?.url || user?.profileImage || "/placeholder-user.jpg"} 
-                          alt={user?.name || "User"}
-                          className="object-cover"
-                        />
-                        <AvatarFallback>
-                          {user?.name ? user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "U"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium">{user?.name || "User"}</p>
-                        <p className="text-xs text-muted-foreground">{user?.email}</p>
+                    {/* User Profile Header */}
+                    <div className="p-6 bg-gradient-to-br from-primary/10 via-primary/5 to-background border-b">
+                      <div className="flex items-center gap-4">
+                        <Avatar className="h-16 w-16 border-2 border-primary/20">
+                          <AvatarImage 
+                            src={user?.profileImage?.url || user?.profileImage || "/placeholder-user.jpg"} 
+                            alt={user?.name || "User"}
+                            className="object-cover"
+                          />
+                          <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">
+                            {user?.name ? user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "U"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-base font-semibold truncate">{user?.name || "User"}</p>
+                          <p className="text-sm text-muted-foreground truncate">{user?.email}</p>
+                        </div>
                       </div>
                     </div>
-                    <Link
-                      href="/profile"
-                      className="flex items-center gap-2 text-lg font-semibold"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      <User className="h-5 w-5" />
-                      My Profile
-                    </Link>
-                    {navLinks.map((link) => (
-                      <Link
-                        key={link.href}
-                        href={link.href}
-                        className="flex items-center gap-2 text-lg font-medium"
-                        onClick={() => setIsOpen(false)}
+
+                    {/* Navigation Links */}
+                    <nav className="flex-1 overflow-y-auto p-4">
+                      <div className="space-y-1">
+                        {/* My Profile */}
+                        <Link
+                          href="/profile"
+                          className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors"
+                          onClick={() => setIsOpen(false)}
+                        >
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                            <User className="h-5 w-5 text-primary" />
+                          </div>
+                          <span className="text-base font-medium">My Profile</span>
+                        </Link>
+
+                        {/* My Orders */}
+                        <Link
+                          href="/orders"
+                          className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors"
+                          onClick={() => setIsOpen(false)}
+                        >
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                            <Package className="h-5 w-5 text-primary" />
+                          </div>
+                          <span className="text-base font-medium">My Orders</span>
+                        </Link>
+
+                        {/* Appointments */}
+                        <Link
+                          href="/appointments"
+                          className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-accent transition-colors"
+                          onClick={() => setIsOpen(false)}
+                        >
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                            <Stethoscope className="h-5 w-5 text-primary" />
+                          </div>
+                          <span className="text-base font-medium">Appointments</span>
+                        </Link>
+
+                        <Separator className="my-3" />
+
+                        {/* Main Navigation Links */}
+                        {navLinks.map((link) => (
+                          <Link
+                            key={link.href}
+                            href={link.href}
+                            className={cn(
+                              "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
+                              pathname === link.href 
+                                ? "bg-primary/10 text-primary font-medium" 
+                                : "hover:bg-accent"
+                            )}
+                            onClick={() => setIsOpen(false)}
+                          >
+                            <div className={cn(
+                              "flex h-10 w-10 items-center justify-center rounded-lg",
+                              pathname === link.href ? "bg-primary/20" : "bg-muted"
+                            )}>
+                              <link.icon className="h-5 w-5" />
+                            </div>
+                            <span className="text-base">{link.label}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </nav>
+
+                    {/* Logout Button */}
+                    <div className="p-4 border-t bg-muted/30">
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20"
+                        onClick={() => {
+                          setIsOpen(false)
+                          handleLogout()
+                        }}
                       >
-                        <link.icon className="h-5 w-5" />
-                        {link.label}
-                      </Link>
-                    ))}
-                    <Button
-                      variant="outline"
-                      className="justify-start text-red-600 hover:text-red-700"
-                      onClick={() => {
-                        setIsOpen(false)
-                        handleLogout()
-                      }}
-                    >
-                      <LogOut className="mr-2 h-5 w-5" />
-                      Logout
-                    </Button>
+                        <LogOut className="mr-3 h-5 w-5" />
+                        <span className="text-base font-medium">Logout</span>
+                      </Button>
+                    </div>
                   </>
                 ) : (
-                  <Button asChild>
-                    <Link href="/login" onClick={() => setIsOpen(false)}>
-                      <LogIn className="mr-2 h-4 w-4" />
-                      Login
-                    </Link>
-                  </Button>
+                  <div className="p-6">
+                    <Button asChild className="w-full" size="lg">
+                      <Link href="/login" onClick={() => setIsOpen(false)}>
+                        <LogIn className="mr-2 h-5 w-5" />
+                        Login to Continue
+                      </Link>
+                    </Button>
+                  </div>
                 )}
-              </nav>
+              </div>
             </SheetContent>
           </Sheet>
         </div>

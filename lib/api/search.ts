@@ -7,45 +7,56 @@ export interface SearchResult {
   [key: string]: any
 }
 
+export interface CategoryResults {
+  count: number
+  total: number
+  hasMore: boolean
+  data: any[]
+}
+
 export interface SearchResponse {
   success: boolean
   query: string
+  letter?: string
+  page: number
+  limit: number
   totalResults: number
   results: {
-    medicines: {
-      count: number
-      data: any[]
-    }
-    labTests: {
-      count: number
-      data: any[]
-    }
-    categoryProducts: {
-      count: number
-      data: any[]
-    }
-    categories: {
-      count: number
-      data: any[]
-    }
-    doctors: {
-      count: number
-      data: any[]
-    }
+    medicines: CategoryResults
+    labTests: CategoryResults
+    categoryProducts: CategoryResults
+    categories: CategoryResults
+    doctors: CategoryResults
   }
 }
 
 export const searchApi = {
-  // Unified search across all types
-  search: async (query: string, options?: { limit?: number; types?: string }): Promise<SearchResponse> => {
+  // Unified search across all types with pagination
+  search: async (
+    query: string, 
+    options?: { 
+      limit?: number
+      page?: number
+      types?: string
+      letter?: string
+    }
+  ): Promise<SearchResponse> => {
     const queryParams = new URLSearchParams({ q: query })
     
     if (options?.limit) {
       queryParams.append("limit", options.limit.toString())
     }
     
+    if (options?.page) {
+      queryParams.append("page", options.page.toString())
+    }
+    
     if (options?.types) {
       queryParams.append("types", options.types)
+    }
+
+    if (options?.letter && options.letter !== 'all') {
+      queryParams.append("letter", options.letter)
     }
 
     const response = await fetch(`${API_BASE_URL}/search?${queryParams}`)
@@ -57,20 +68,20 @@ export const searchApi = {
     return response.json()
   },
 
-  // Search specific types
-  searchMedicines: async (query: string, limit?: number) => {
-    return searchApi.search(query, { types: "medicine", limit })
+  // Search specific types with pagination
+  searchMedicines: async (query: string, options?: { limit?: number; page?: number; letter?: string }) => {
+    return searchApi.search(query, { types: "medicine", ...options })
   },
 
-  searchLabTests: async (query: string, limit?: number) => {
-    return searchApi.search(query, { types: "labtest", limit })
+  searchLabTests: async (query: string, options?: { limit?: number; page?: number }) => {
+    return searchApi.search(query, { types: "labtest", ...options })
   },
 
-  searchProducts: async (query: string, limit?: number) => {
-    return searchApi.search(query, { types: "categoryproduct", limit })
+  searchProducts: async (query: string, options?: { limit?: number; page?: number }) => {
+    return searchApi.search(query, { types: "categoryproduct", ...options })
   },
 
-  searchDoctors: async (query: string, limit?: number) => {
-    return searchApi.search(query, { types: "doctor", limit })
+  searchDoctors: async (query: string, options?: { limit?: number; page?: number }) => {
+    return searchApi.search(query, { types: "doctor", ...options })
   },
 }

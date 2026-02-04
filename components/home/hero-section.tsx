@@ -193,7 +193,7 @@ export function HeroSection() {
                             <div className="flex-1 min-w-0">
                               <div className="font-medium text-sm truncate">{item.name}</div>
                               <div className="text-xs text-muted-foreground truncate">
-                                {item.category} • ₹{item.discountedPrice}
+                                {typeof item.category === 'object' ? item.category?.name : item.category} • ₹{item.discountedPrice}
                               </div>
                             </div>
                             <Badge variant="secondary" className="text-xs">Lab Test</Badge>

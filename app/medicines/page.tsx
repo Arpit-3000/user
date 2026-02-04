@@ -42,7 +42,7 @@ export default function MedicinesPage() {
   React.useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery)
-    }, 500)
+    }, 1000) // 1 second debounce
 
     return () => clearTimeout(timer)
   }, [searchQuery])
@@ -86,70 +86,109 @@ export default function MedicinesPage() {
   const loadMedicines = async () => {
     setLoading(true)
     try {
-      const params: any = {
-        page: currentPage,
-        limit: itemsPerPage,
-      }
-
-      // When searching, don't apply letter filter
-      if (selectedLetter !== "all" && !debouncedSearchQuery.trim()) {
-        params.letter = selectedLetter
-      }
-
+      // If there's a search query, use unified search API
       if (debouncedSearchQuery.trim()) {
-        params.search = debouncedSearchQuery.trim()
-        console.log("🔍 Searching for:", debouncedSearchQuery.trim())
-      }
+        const { searchApi } = await import("@/lib/api/search")
+        const searchOptions: any = {
+          limit: itemsPerPage,
+          page: currentPage,
+        }
 
-      if (selectedCategories.length > 0) {
-        params.category = selectedCategories.join(",")
-      }
+        // Add letter filter if selected
+        if (selectedLetter !== "all") {
+          searchOptions.letter = selectedLetter
+        }
 
-      if (prescriptionFilter === "no-rx") {
-        params.prescriptionRequired = false
-      } else if (prescriptionFilter === "rx") {
-        params.prescriptionRequired = true
-      }
+        console.log("=== UNIFIED SEARCH API REQUEST ===")
+        console.log("Query:", debouncedSearchQuery.trim())
+        console.log("Options:", searchOptions)
+        console.log("==================================")
 
-      console.log("=== MEDICINES API REQUEST ===")
-      console.log("API URL:", `${process.env.NEXT_PUBLIC_API_BASE_URL}/medicines`)
-      console.log("Params:", params)
-      console.log("Query String:", new URLSearchParams(params).toString())
-      console.log("============================")
-
-      const response = await medicinesApi.getMedicines(params)
-      
-      console.log("=== MEDICINES API RESPONSE ===")
-      console.log("Success:", response.success)
-      console.log("Medicines Count:", response.data?.length)
-      console.log("Total Medicines:", response.totalMedicines)
-      console.log("Total Pages:", response.totalPages)
-      console.log("Current Page:", response.currentPage)
-      console.log("Search Query:", response.search)
-      console.log("==============================")
-      
-      if (response.success) {
-        const newMedicines = response.data || []
-        setMedicines(newMedicines)
-        setTotalPages(response.totalPages || 1)
-        setTotalMedicines(response.totalMedicines || newMedicines.length)
+        const response = await searchApi.searchMedicines(debouncedSearchQuery.trim(), searchOptions)
         
-        if (debouncedSearchQuery.trim() && newMedicines.length === 0) {
-          toast({
-            title: "No results found",
-            description: `No medicines found for "${debouncedSearchQuery}"`,
-          })
+        console.log("=== UNIFIED SEARCH API RESPONSE ===")
+        console.log("Success:", response.success)
+        console.log("Medicines Results:", response.results?.medicines)
+        console.log("Total Results:", response.results?.medicines?.total)
+        console.log("Has More:", response.results?.medicines?.hasMore)
+        console.log("===================================")
+        
+        if (response.success && response.results?.medicines) {
+          const medicinesData = response.results.medicines
+          const newMedicines = medicinesData.data || []
+          setMedicines(newMedicines)
+          
+          // Calculate total pages from total count
+          const total = medicinesData.total || 0
+          setTotalMedicines(total)
+          setTotalPages(Math.ceil(total / itemsPerPage))
+
+          if (newMedicines.length === 0) {
+            toast({
+              title: "No results found",
+              description: `No medicines found for "${debouncedSearchQuery}"`,
+            })
+          }
+        } else {
+          setMedicines([])
+          setTotalPages(1)
+          setTotalMedicines(0)
         }
       } else {
-        console.log("API returned success: false")
-        setMedicines([])
-        setTotalPages(1)
-        setTotalMedicines(0)
-        toast({
-          title: "Error",
-          description: response.message || "Failed to load medicines",
-          variant: "destructive",
-        })
+        // No search query, use regular medicines API with filters
+        const params: any = {
+          page: currentPage,
+          limit: itemsPerPage,
+        }
+
+        // When searching, don't apply letter filter
+        if (selectedLetter !== "all") {
+          params.letter = selectedLetter
+        }
+
+        if (selectedCategories.length > 0) {
+          params.category = selectedCategories.join(",")
+        }
+
+        if (prescriptionFilter === "no-rx") {
+          params.prescriptionRequired = false
+        } else if (prescriptionFilter === "rx") {
+          params.prescriptionRequired = true
+        }
+
+        console.log("=== MEDICINES API REQUEST ===")
+        console.log("API URL:", `${process.env.NEXT_PUBLIC_API_BASE_URL}/medicines`)
+        console.log("Params:", params)
+        console.log("Query String:", new URLSearchParams(params).toString())
+        console.log("============================")
+
+        const response = await medicinesApi.getMedicines(params)
+        
+        console.log("=== MEDICINES API RESPONSE ===")
+        console.log("Success:", response.success)
+        console.log("Medicines Count:", response.data?.length)
+        console.log("Total Medicines:", response.totalMedicines)
+        console.log("Total Pages:", response.totalPages)
+        console.log("Current Page:", response.currentPage)
+        console.log("Search Query:", response.search)
+        console.log("==============================")
+        
+        if (response.success) {
+          const newMedicines = response.data || []
+          setMedicines(newMedicines)
+          setTotalPages(response.totalPages || 1)
+          setTotalMedicines(response.totalMedicines || newMedicines.length)
+        } else {
+          console.log("API returned success: false")
+          setMedicines([])
+          setTotalPages(1)
+          setTotalMedicines(0)
+          toast({
+            title: "Error",
+            description: response.message || "Failed to load medicines",
+            variant: "destructive",
+          })
+        }
       }
     } catch (error: any) {
       console.error("Failed to load medicines:", error)

@@ -6,6 +6,11 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  experimental: {
+    turbo: {
+      useSystemTlsCerts: true,
+    },
+  },
 }
 
 export default nextConfig
