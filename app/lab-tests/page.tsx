@@ -95,13 +95,18 @@ export default function LabTestsPage() {
       const cartData = await getCart()
       const items: Record<string, number> = {}
       cartData.cart.items.forEach((item) => {
-        if (item.labTestId) {
+        // Check if labTestId exists and has _id property
+        if (item.labTestId && typeof item.labTestId === 'object' && item.labTestId._id) {
           items[item.labTestId._id] = item.quantity
+        } else if (item.labTestId && typeof item.labTestId === 'string') {
+          // Handle case where labTestId is just a string ID
+          items[item.labTestId] = item.quantity
         }
       })
       setCartItems(items)
     } catch (error) {
       // Cart might be empty or user not logged in
+      console.error("Error loading cart items:", error)
     }
   }
 

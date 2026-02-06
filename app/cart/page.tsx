@@ -52,11 +52,11 @@ export default function CartPage() {
       const updateData: any = { quantity: newQuantity };
 
       if (item.productType === 'medicine' && item.medicineId) {
-        updateData.medicineId = item.medicineId._id;
+        updateData.medicineId = typeof item.medicineId === 'object' ? item.medicineId._id : item.medicineId;
       } else if (item.productType === 'categoryProduct' && item.categoryProductId) {
-        updateData.categoryProductId = item.categoryProductId._id;
+        updateData.categoryProductId = typeof item.categoryProductId === 'object' ? item.categoryProductId._id : item.categoryProductId;
       } else if (item.productType === 'labTest' && item.labTestId) {
-        updateData.labTestId = item.labTestId._id;
+        updateData.labTestId = typeof item.labTestId === 'object' ? item.labTestId._id : item.labTestId;
         updateData.isHomeCollection = item.isHomeCollection || false;
       }
 
@@ -78,14 +78,17 @@ export default function CartPage() {
         const addData: any = { quantity: newQuantity };
 
         if (item.productType === 'medicine' && item.medicineId) {
-          removeData.medicineId = item.medicineId._id;
-          addData.medicineId = item.medicineId._id;
+          const medicineId = typeof item.medicineId === 'object' ? item.medicineId._id : item.medicineId;
+          removeData.medicineId = medicineId;
+          addData.medicineId = medicineId;
         } else if (item.productType === 'categoryProduct' && item.categoryProductId) {
-          removeData.categoryProductId = item.categoryProductId._id;
-          addData.categoryProductId = item.categoryProductId._id;
+          const productId = typeof item.categoryProductId === 'object' ? item.categoryProductId._id : item.categoryProductId;
+          removeData.categoryProductId = productId;
+          addData.categoryProductId = productId;
         } else if (item.productType === 'labTest' && item.labTestId) {
-          removeData.labTestId = item.labTestId._id;
-          addData.labTestId = item.labTestId._id;
+          const labTestId = typeof item.labTestId === 'object' ? item.labTestId._id : item.labTestId;
+          removeData.labTestId = labTestId;
+          addData.labTestId = labTestId;
           removeData.isHomeCollection = item.isHomeCollection || false;
           addData.isHomeCollection = item.isHomeCollection || false;
         }
@@ -123,11 +126,11 @@ export default function CartPage() {
       const removeData: any = {};
 
       if (item.productType === 'medicine' && item.medicineId) {
-        removeData.medicineId = item.medicineId._id;
+        removeData.medicineId = typeof item.medicineId === 'object' ? item.medicineId._id : item.medicineId;
       } else if (item.productType === 'categoryProduct' && item.categoryProductId) {
-        removeData.categoryProductId = item.categoryProductId._id;
+        removeData.categoryProductId = typeof item.categoryProductId === 'object' ? item.categoryProductId._id : item.categoryProductId;
       } else if (item.productType === 'labTest' && item.labTestId) {
-        removeData.labTestId = item.labTestId._id;
+        removeData.labTestId = typeof item.labTestId === 'object' ? item.labTestId._id : item.labTestId;
         removeData.isHomeCollection = item.isHomeCollection || false;
       }
 

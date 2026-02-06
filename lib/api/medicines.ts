@@ -204,7 +204,9 @@ export const medicinesApi = {
       if (params.prescriptionRequired !== undefined) queryParams.append('prescriptionRequired', params.prescriptionRequired.toString())
       if (params.inStock !== undefined) queryParams.append('inStock', params.inStock.toString())
 
-      const response = await fetch(`${API_BASE_URL}/medicines/search/unified?${queryParams.toString()}`)
+      const response = await fetch(`${API_BASE_URL}/medicines/search/unified?${queryParams.toString()}`, {
+        headers: getAuthHeaders(),
+      })
       return await response.json()
     } catch (error) {
       return handleApiError(error)
@@ -227,7 +229,9 @@ export const medicinesApi = {
       if (params.sortBy) queryParams.append('sortBy', params.sortBy)
       if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder)
 
-      const response = await fetch(`${API_BASE_URL}/medicines/search/by-formula?${queryParams.toString()}`)
+      const response = await fetch(`${API_BASE_URL}/medicines/search/by-formula?${queryParams.toString()}`, {
+        headers: getAuthHeaders(),
+      })
       return await response.json()
     } catch (error) {
       return handleApiError(error)
@@ -244,7 +248,9 @@ export const medicinesApi = {
       if (params?.search) queryParams.append('search', params.search)
       if (params?.limit) queryParams.append('limit', params.limit.toString())
 
-      const response = await fetch(`${API_BASE_URL}/medicines/search/formulas?${queryParams.toString()}`)
+      const response = await fetch(`${API_BASE_URL}/medicines/search/formulas?${queryParams.toString()}`, {
+        headers: getAuthHeaders(),
+      })
       return await response.json()
     } catch (error) {
       return handleApiError(error)

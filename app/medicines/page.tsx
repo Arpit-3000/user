@@ -75,13 +75,18 @@ export default function MedicinesPage() {
       const cartData = await getCart()
       const items: Record<string, number> = {}
       cartData.cart.items.forEach((item) => {
-        if (item.medicineId) {
+        // Check if medicineId exists and has _id property
+        if (item.medicineId && typeof item.medicineId === 'object' && item.medicineId._id) {
           items[item.medicineId._id] = item.quantity
+        } else if (item.medicineId && typeof item.medicineId === 'string') {
+          // Handle case where medicineId is just a string ID
+          items[item.medicineId] = item.quantity
         }
       })
       setCartItems(items)
     } catch (error) {
-      // Cart might be empty
+      // Cart might be empty or error loading
+      console.error("Error loading cart items:", error)
     }
   }
 
