@@ -113,26 +113,26 @@ export interface UnifiedSearchResponse {
   success: boolean
   message: string
   query: string
-  stats: {
+  data: Medicine[]
+  categorizedResults: {
     exactNameMatch: number
     partialNameMatch: number
     formulaMatch: number
     genericMatch: number
   }
-  categorizedResults: {
-    exactNameMatch: Medicine[]
-    partialNameMatch: Medicine[]
-    formulaMatch: Medicine[]
-    genericMatch: Medicine[]
-  }
-  allResults: Medicine[]
-  pagination: {
+  metadata: {
     currentPage: number
     totalPages: number
     totalResults: number
     resultsPerPage: number
     hasNextPage: boolean
     hasPrevPage: boolean
+  }
+  appliedFilters?: {
+    category: string | null
+    prescriptionRequired: boolean | null
+    priceRange: { min?: number; max?: number } | null
+    inStock: boolean | null
   }
 }
 
@@ -142,16 +142,6 @@ export interface FormulaSearchResponse {
   formula: string
   data: Medicine[]
   metadata: {
-    totalMedicines: number
-    manufacturers: string[]
-    manufacturerCount: number
-    priceRange: {
-      min: number
-      max: number
-      average: string
-    }
-  }
-  pagination: {
     currentPage: number
     totalPages: number
     totalResults: number
@@ -163,12 +153,11 @@ export interface FormulaSearchResponse {
 
 export interface FormulasListResponse {
   success: boolean
-  message: string
+  count: number
   data: Array<{
-    name: string
-    medicineCount: number
+    formula: string
+    count: number
   }>
-  totalFormulas: number
 }
 
 export const medicinesApi = {
@@ -183,6 +172,7 @@ export const medicinesApi = {
   },
 
   // Unified search - Search by name OR formula in single API
+  // Endpoint: GET /api/medicines/search
   unifiedSearch: async (params: {
     query: string
     page?: number
@@ -204,7 +194,7 @@ export const medicinesApi = {
       if (params.prescriptionRequired !== undefined) queryParams.append('prescriptionRequired', params.prescriptionRequired.toString())
       if (params.inStock !== undefined) queryParams.append('inStock', params.inStock.toString())
 
-      const response = await fetch(`${API_BASE_URL}/medicines/search/unified?${queryParams.toString()}`, {
+      const response = await fetch(`${API_BASE_URL}/medicines/search?${queryParams.toString()}`, {
         headers: getAuthHeaders(),
       })
       return await response.json()
@@ -214,6 +204,7 @@ export const medicinesApi = {
   },
 
   // Search by formula/salt
+  // Endpoint: GET /api/medicines/formula
   searchByFormula: async (params: {
     formula: string
     page?: number
@@ -229,7 +220,7 @@ export const medicinesApi = {
       if (params.sortBy) queryParams.append('sortBy', params.sortBy)
       if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder)
 
-      const response = await fetch(`${API_BASE_URL}/medicines/search/by-formula?${queryParams.toString()}`, {
+      const response = await fetch(`${API_BASE_URL}/medicines/formula?${queryParams.toString()}`, {
         headers: getAuthHeaders(),
       })
       return await response.json()
@@ -239,6 +230,7 @@ export const medicinesApi = {
   },
 
   // Get all available formulas/salts
+  // Endpoint: GET /api/medicines/formulas
   getFormulas: async (params?: {
     search?: string
     limit?: number
@@ -248,7 +240,7 @@ export const medicinesApi = {
       if (params?.search) queryParams.append('search', params.search)
       if (params?.limit) queryParams.append('limit', params.limit.toString())
 
-      const response = await fetch(`${API_BASE_URL}/medicines/search/formulas?${queryParams.toString()}`, {
+      const response = await fetch(`${API_BASE_URL}/medicines/formulas?${queryParams.toString()}`, {
         headers: getAuthHeaders(),
       })
       return await response.json()
