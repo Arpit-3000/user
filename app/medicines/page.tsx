@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Search, Grid3x3, List, ShoppingCart, SlidersHorizontal, Loader2, Plus, Minus, Trash2, ChevronLeft, ChevronRight, X } from "lucide-react"
+import { Search, Grid3x3, List, ShoppingCart, SlidersHorizontal, Loader2, Plus, Minus, Trash2, ChevronLeft, ChevronRight, X, Pill } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { Switch } from "@/components/ui/switch"
 import Link from "next/link"
 import { medicinesApi, type Medicine, type AlphabetIndexItem } from "@/lib/api/medicines"
 import { useToast } from "@/hooks/use-toast"
@@ -23,6 +24,7 @@ export default function MedicinesPage() {
   const [viewMode, setViewMode] = React.useState<"grid" | "list">("grid")
   const [searchQuery, setSearchQuery] = React.useState("")
   const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("")
+  const [genericSearch, setGenericSearch] = React.useState(false) // Generic/Formula search toggle
   const [medicines, setMedicines] = React.useState<Medicine[]>([])
   const [loading, setLoading] = React.useState(true)
   const [selectedCategories, setSelectedCategories] = React.useState<string[]>([])
@@ -54,7 +56,7 @@ export default function MedicinesPage() {
   React.useEffect(() => {
     loadMedicines()
     loadCartItems()
-  }, [selectedLetter, currentPage, debouncedSearchQuery, selectedCategories, prescriptionFilter])
+  }, [selectedLetter, currentPage, debouncedSearchQuery, selectedCategories, prescriptionFilter, genericSearch])
 
   const loadAlphabetIndex = async () => {
     try {
@@ -86,53 +88,94 @@ export default function MedicinesPage() {
   const loadMedicines = async () => {
     setLoading(true)
     try {
-      // If there's a search query, use unified search API
+      // If there's a search query, use appropriate search API
       if (debouncedSearchQuery.trim()) {
-        const { searchApi } = await import("@/lib/api/search")
-        const searchOptions: any = {
-          limit: itemsPerPage,
-          page: currentPage,
-        }
-
-        // Add letter filter if selected
-        if (selectedLetter !== "all") {
-          searchOptions.letter = selectedLetter
-        }
-
-        console.log("=== UNIFIED SEARCH API REQUEST ===")
-        console.log("Query:", debouncedSearchQuery.trim())
-        console.log("Options:", searchOptions)
-        console.log("==================================")
-
-        const response = await searchApi.searchMedicines(debouncedSearchQuery.trim(), searchOptions)
         
-        console.log("=== UNIFIED SEARCH API RESPONSE ===")
-        console.log("Success:", response.success)
-        console.log("Medicines Results:", response.results?.medicines)
-        console.log("Total Results:", response.results?.medicines?.total)
-        console.log("Has More:", response.results?.medicines?.hasMore)
-        console.log("===================================")
-        
-        if (response.success && response.results?.medicines) {
-          const medicinesData = response.results.medicines
-          const newMedicines = medicinesData.data || []
-          setMedicines(newMedicines)
+        // Generic/Formula Search Mode
+        if (genericSearch) {
+          console.log("=== GENERIC/FORMULA SEARCH API REQUEST ===")
+          console.log("Query:", debouncedSearchQuery.trim())
+          console.log("Mode: Generic/Formula Search")
+          console.log("==========================================")
+
+          const response = await medicinesApi.searchByFormula({
+            formula: debouncedSearchQuery.trim(),
+            page: currentPage,
+            limit: itemsPerPage,
+          })
           
-          // Calculate total pages from total count
-          const total = medicinesData.total || 0
-          setTotalMedicines(total)
-          setTotalPages(Math.ceil(total / itemsPerPage))
+          console.log("=== GENERIC/FORMULA SEARCH API RESPONSE ===")
+          console.log("Success:", response.success)
+          console.log("Formula:", response.formula)
+          console.log("Total Results:", response.metadata?.totalResults)
+          console.log("===========================================")
+          
+          if (response.success && response.data) {
+            setMedicines(response.data || [])
+            const total = response.metadata?.totalResults || 0
+            setTotalMedicines(total)
+            setTotalPages(response.metadata?.totalPages || Math.ceil(total / itemsPerPage))
 
-          if (newMedicines.length === 0) {
-            toast({
-              title: "No results found",
-              description: `No medicines found for "${debouncedSearchQuery}"`,
-            })
+            if (response.data.length === 0) {
+              toast({
+                title: "No results found",
+                description: `No medicines found with formula/generic "${debouncedSearchQuery}"`,
+              })
+            }
+          } else {
+            setMedicines([])
+            setTotalPages(1)
+            setTotalMedicines(0)
           }
-        } else {
-          setMedicines([])
-          setTotalPages(1)
-          setTotalMedicines(0)
+        } 
+        // Normal Unified Search Mode
+        else {
+          const { searchApi } = await import("@/lib/api/search")
+          const searchOptions: any = {
+            limit: itemsPerPage,
+            page: currentPage,
+          }
+
+          // Add letter filter if selected
+          if (selectedLetter !== "all") {
+            searchOptions.letter = selectedLetter
+          }
+
+          console.log("=== UNIFIED SEARCH API REQUEST ===")
+          console.log("Query:", debouncedSearchQuery.trim())
+          console.log("Options:", searchOptions)
+          console.log("==================================")
+
+          const response = await searchApi.searchMedicines(debouncedSearchQuery.trim(), searchOptions)
+          
+          console.log("=== UNIFIED SEARCH API RESPONSE ===")
+          console.log("Success:", response.success)
+          console.log("Medicines Results:", response.results?.medicines)
+          console.log("Total Results:", response.results?.medicines?.total)
+          console.log("Has More:", response.results?.medicines?.hasMore)
+          console.log("===================================")
+          
+          if (response.success && response.results?.medicines) {
+            const medicinesData = response.results.medicines
+            const newMedicines = medicinesData.data || []
+            setMedicines(newMedicines)
+            
+            // Calculate total pages from total count
+            const total = medicinesData.total || 0
+            setTotalMedicines(total)
+            setTotalPages(Math.ceil(total / itemsPerPage))
+
+            if (newMedicines.length === 0) {
+              toast({
+                title: "No results found",
+                description: `No medicines found for "${debouncedSearchQuery}"`,
+              })
+            }
+          } else {
+            setMedicines([])
+            setTotalPages(1)
+            setTotalMedicines(0)
+          }
         }
       } else {
         // No search query, use regular medicines API with filters
@@ -320,6 +363,7 @@ export default function MedicinesPage() {
     setSearchQuery("")
     setDebouncedSearchQuery("")
     setSelectedLetter("all")
+    setGenericSearch(false)
     setCurrentPage(1)
   }
 
@@ -427,7 +471,7 @@ export default function MedicinesPage() {
         </div>
       </div>
 
-      {(selectedLetter !== "all" || debouncedSearchQuery || selectedCategories.length > 0 || prescriptionFilter) && (
+      {(selectedLetter !== "all" || debouncedSearchQuery || selectedCategories.length > 0 || prescriptionFilter || genericSearch) && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">Active filters:</span>
           {selectedLetter !== "all" && !debouncedSearchQuery && (
@@ -438,11 +482,17 @@ export default function MedicinesPage() {
           )}
           {debouncedSearchQuery && (
             <Badge variant="secondary" className="gap-1">
-              Search: {debouncedSearchQuery}
+              {genericSearch ? "Generic/Formula" : "Search"}: {debouncedSearchQuery}
               <X className="h-3 w-3 cursor-pointer" onClick={() => {
                 setSearchQuery("")
                 setDebouncedSearchQuery("")
               }} />
+            </Badge>
+          )}
+          {genericSearch && (
+            <Badge variant="default" className="gap-1">
+              <Pill className="h-3 w-3" />
+              Generic Search Mode
             </Badge>
           )}
           {selectedCategories.map((cat) => (
@@ -464,20 +514,38 @@ export default function MedicinesPage() {
       )}
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={`Search ${selectedLetter !== "all" && !searchQuery ? `in ${selectedLetter} medicines` : "all medicines"}...`}
-            className="pl-9"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value)
-              setCurrentPage(1)
-            }}
-          />
-          {loading && debouncedSearchQuery && (
-            <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
-          )}
+        <div className="flex-1 space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder={genericSearch ? "Search by generic name or formula (e.g., Paracetamol, Amoxicillin + Clavulanic)" : `Search ${selectedLetter !== "all" && !searchQuery ? `in ${selectedLetter} medicines` : "all medicines"}...`}
+              className="pl-9"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                setCurrentPage(1)
+              }}
+            />
+            {loading && debouncedSearchQuery && (
+              <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+          </div>
+          
+          {/* Generic/Formula Search Toggle */}
+          <div className="flex items-center gap-2 px-1">
+            <Switch
+              id="generic-search"
+              checked={genericSearch}
+              onCheckedChange={(checked) => {
+                setGenericSearch(checked)
+                setCurrentPage(1)
+              }}
+            />
+            <Label htmlFor="generic-search" className="text-sm cursor-pointer flex items-center gap-2">
+              <Pill className="h-4 w-4" />
+              Search by Generic Name / Formula
+            </Label>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

@@ -337,6 +337,18 @@ export const medicinesApi = {
     }
   },
 
+  // Search by generic name
+  searchByGenericName: async (genericName: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/medicines/generic/${encodeURIComponent(genericName)}`, {
+        headers: getAuthHeaders(),
+      })
+      return await response.json()
+    } catch (error) {
+      return handleApiError(error)
+    }
+  },
+
   getByCategory: async (category: string, params?: { page?: number; limit?: number }) => {
     try {
       const queryString = new URLSearchParams({ category, ...params } as any).toString()
