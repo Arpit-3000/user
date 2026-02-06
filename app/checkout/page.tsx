@@ -65,7 +65,7 @@ export default function CheckoutPage() {
       }
 
       setCartItems(cartData.cart.items);
-      setCartId(cartData.cart._id);
+      setCartId(cartData.cart?._id || '');
       
       // Calculate total price from items if not provided
       const calculatedTotal = cartData.cart.items.reduce((sum: number, item: CartItem) => {
@@ -105,8 +105,10 @@ export default function CheckoutPage() {
       }
 
       // Check prescription status
-      const prescStatus = await checkPrescriptionStatus(cartData.cart._id);
-      setPrescriptionStatus(prescStatus.data);
+      if (cartData.cart?._id) {
+        const prescStatus = await checkPrescriptionStatus(cartData.cart._id);
+        setPrescriptionStatus(prescStatus.data);
+      }
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -310,7 +312,11 @@ export default function CheckoutPage() {
           description: 'Order placed successfully!',
         });
 
-        router.push(`/orders/${result.order._id}`);
+        if (result.order?._id) {
+          router.push(`/orders/${result.order._id}`);
+        } else {
+          router.push('/orders');
+        }
       }
     } catch (error: any) {
       toast({

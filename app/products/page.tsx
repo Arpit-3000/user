@@ -53,6 +53,14 @@ export default function ProductsPage() {
   const [addingToCart, setAddingToCart] = React.useState<string | null>(null)
   const [cartItems, setCartItems] = React.useState<Map<string, number>>(new Map())
 
+  // Helper function to safely get category ID
+  const getCategoryId = (product: CategoryProduct): string => {
+    if (!product.category) return 'unknown'
+    if (typeof product.category === 'string') return product.category
+    if (typeof product.category === 'object' && product.category._id) return product.category._id
+    return 'unknown'
+  }
+
   React.useEffect(() => {
     loadCategories()
     loadCartItems()
@@ -591,7 +599,7 @@ export default function ProductsPage() {
                   {products.map((product) => (
                     <Card key={product.id} className="group overflow-hidden transition-shadow hover:shadow-lg">
                       <CardContent className="p-4">
-                        <Link href={`/products/${product.category._id}/${product.id}`}>
+                        <Link href={`/products/${getCategoryId(product)}/${product.id}`}>
                           <div className="relative mb-4 aspect-square overflow-hidden rounded-lg bg-muted">
                             <img
                               src={product.images[0] || "/placeholder.svg"}
@@ -617,7 +625,7 @@ export default function ProductsPage() {
                         </Link>
 
                         <div className="space-y-2">
-                          <Link href={`/products/${product.category._id}/${product.id}`}>
+                          <Link href={`/products/${getCategoryId(product)}/${product.id}`}>
                             <h3 className="font-semibold text-balance leading-tight hover:text-primary line-clamp-2">
                               {product.productName}
                             </h3>
@@ -713,7 +721,7 @@ export default function ProductsPage() {
                       <CardContent className="p-4">
                         <div className="flex gap-4">
                           <Link
-                            href={`/products/${product.category._id}/${product.id}`}
+                            href={`/products/${getCategoryId(product)}/${product.id}`}
                             className="shrink-0"
                           >
                             <div className="relative h-24 w-24 overflow-hidden rounded-lg bg-muted md:h-32 md:w-32">
@@ -736,7 +744,7 @@ export default function ProductsPage() {
                             <div>
                               <div className="mb-1 flex items-start gap-2">
                                 <Link
-                                  href={`/products/${product.category._id}/${product.id}`}
+                                  href={`/products/${getCategoryId(product)}/${product.id}`}
                                   className="flex-1"
                                 >
                                   <h3 className="font-semibold hover:text-primary">{product.productName}</h3>

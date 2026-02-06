@@ -161,9 +161,9 @@ export function AIChatbot({ onClose, isMinimized, onToggleMinimize }: AIChatbotP
   }
 
   const handleRecommendationClick = (recommendation: Recommendation) => {
-    if (recommendation.type === "doctor") {
+    if (recommendation.type === "doctor" && recommendation.data?._id) {
       router.push(`/appointments/book/${recommendation.data._id}`)
-    } else if (recommendation.type === "product") {
+    } else if (recommendation.type === "product" && recommendation.data?._id) {
       router.push(`/medicines/${recommendation.data._id}`)
     }
   }
