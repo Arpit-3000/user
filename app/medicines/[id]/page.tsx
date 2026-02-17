@@ -211,24 +211,12 @@ export default function MedicineDetailPage() {
     )
   }
 
-  // Check stock availability - simple check matching list page
+  // Check stock availability - Always show as available regardless of backend stock value
   const stockData = medicine.stock || {}
   const stockQuantity = stockData.quantity ?? 0
   
-  // Medicine is in stock if quantity is greater than 0
-  // Negative quantities are treated as out of stock
-  const inStock = stockQuantity > 0
-
-  // Debug logging
-  if (typeof window !== 'undefined') {
-    console.log("=== MEDICINE DETAIL STOCK CHECK ===");
-    console.log("Medicine:", medicine.productName);
-    console.log("Stock Data:", stockData);
-    console.log("Stock Quantity:", stockQuantity);
-    console.log("In Stock:", inStock);
-    console.log("Note: Negative stock is treated as out of stock");
-    console.log("===================================");
-  }
+  // Always show as in stock to allow users to order
+  const inStock = true
 
   return (
     <div className="container px-4 py-8 md:px-6">
@@ -285,7 +273,7 @@ export default function MedicineDetailPage() {
               <div>
                 <h1 className="text-3xl font-bold">{medicine.productName}</h1>
                 <p className="mt-2 text-lg text-muted-foreground">
-                  {medicine.brandName} • {medicine.manufacturer}
+                  {medicine.brandName}
                 </p>
                 <p className="text-sm text-muted-foreground">Generic: {medicine.genericName}</p>
               </div>
@@ -298,6 +286,14 @@ export default function MedicineDetailPage() {
                     <Badge className="bg-primary">{medicine.pricing.discount}% OFF</Badge>
                   </>
                 )}
+              </div>
+
+              <Separator />
+
+              {/* Description */}
+              <div>
+                <h3 className="mb-2 font-semibold">Description</h3>
+                <p className="text-muted-foreground leading-relaxed">{medicine.description}</p>
               </div>
 
               <Separator />
@@ -323,48 +319,10 @@ export default function MedicineDetailPage() {
                 <div className="flex items-center gap-2">
                   <Info className="h-5 w-5 text-muted-foreground" />
                   <div>
-                    <p className="text-sm text-muted-foreground">Strength</p>
-                    <p className="font-medium">{medicine.dosage.strength}</p>
+                    <p className="text-sm text-muted-foreground">Category</p>
+                    <p className="font-medium">{medicine.category}</p>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Manufacturer</p>
-                    <p className="font-medium">{medicine.manufacturer}</p>
-                  </div>
-                </div>
-
-                {medicine.dosage.recommendedDosage && (
-                  <div className="flex items-center gap-2 sm:col-span-2">
-                    <Info className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Recommended Dosage</p>
-                      <p className="font-medium">{medicine.dosage.recommendedDosage}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <Separator />
-
-              {/* Availability Status */}
-              <div>
-                {inStock ? (
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
-                      In Stock
-                    </Badge>
-                    {stockQuantity > 0 && (
-                      <span className="text-sm text-muted-foreground">
-                        {stockQuantity} {stockData.unit || 'units'} available
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <Badge variant="destructive">Currently Unavailable</Badge>
-                )}
               </div>
 
               <Separator />
@@ -403,7 +361,7 @@ export default function MedicineDetailPage() {
                       variant="ghost"
                       size="icon"
                       className="h-12 w-12 rounded-none hover:bg-primary hover:text-primary-foreground"
-                      disabled={addingToCart || cartQuantity >= stockQuantity}
+                      disabled={addingToCart}
                       onClick={() => handleUpdateQuantity(cartQuantity + 1)}
                     >
                       <Plus className="h-5 w-5" />
@@ -495,33 +453,6 @@ export default function MedicineDetailPage() {
                         </div>
                       </div>
                     )}
-
-                    {/* Product Details */}
-                    <div className="mt-6 space-y-3">
-                      <h4 className="mb-3 font-medium">Product Details</h4>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {medicine.itemID && (
-                          <div className="rounded-lg border p-3">
-                            <p className="text-sm text-muted-foreground">Item ID</p>
-                            <p className="font-medium">{medicine.itemID}</p>
-                          </div>
-                        )}
-                        {medicine.itemCode && (
-                          <div className="rounded-lg border p-3">
-                            <p className="text-sm text-muted-foreground">Item Code</p>
-                            <p className="font-medium">{medicine.itemCode}</p>
-                          </div>
-                        )}
-                        <div className="rounded-lg border p-3">
-                          <p className="text-sm text-muted-foreground">Category</p>
-                          <p className="font-medium">{medicine.category}</p>
-                        </div>
-                        <div className="rounded-lg border p-3">
-                          <p className="text-sm text-muted-foreground">Generic Name</p>
-                          <p className="font-medium">{medicine.genericName}</p>
-                        </div>
-                      </div>
-                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -735,18 +666,6 @@ export default function MedicineDetailPage() {
                           <div>
                             <h4 className="mb-3 font-medium">Tax Information</h4>
                             <div className="grid gap-3 sm:grid-cols-2">
-                              {medicine.tax.hsnCode && (
-                                <div className="rounded-lg border p-3">
-                                  <p className="text-sm text-muted-foreground">HSN Code</p>
-                                  <p className="font-medium">{medicine.tax.hsnCode}</p>
-                                </div>
-                              )}
-                              {medicine.tax.hsnName && medicine.tax.hsnName !== 'N/A' && (
-                                <div className="rounded-lg border p-3">
-                                  <p className="text-sm text-muted-foreground">HSN Name</p>
-                                  <p className="font-medium">{medicine.tax.hsnName}</p>
-                                </div>
-                              )}
                               <div className="rounded-lg border p-3">
                                 <p className="text-sm text-muted-foreground">SGST (State GST)</p>
                                 <p className="font-medium">{medicine.tax.sgst}%</p>
@@ -755,38 +674,10 @@ export default function MedicineDetailPage() {
                                 <p className="text-sm text-muted-foreground">CGST (Central GST)</p>
                                 <p className="font-medium">{medicine.tax.cgst}%</p>
                               </div>
-                              <div className="rounded-lg border p-3">
-                                <p className="text-sm text-muted-foreground">IGST (Integrated GST)</p>
-                                <p className="font-medium">{medicine.tax.igst}%</p>
-                              </div>
                               <div className="rounded-lg border p-3 bg-muted/50">
                                 <p className="text-sm text-muted-foreground">Total GST</p>
                                 <p className="font-medium">{medicine.tax.sgst + medicine.tax.cgst}%</p>
                               </div>
-                              {medicine.tax.localTax !== undefined && medicine.tax.localTax > 0 && (
-                                <div className="rounded-lg border p-3">
-                                  <p className="text-sm text-muted-foreground">Local Tax</p>
-                                  <p className="font-medium">{medicine.tax.localTax}%</p>
-                                </div>
-                              )}
-                              {medicine.tax.centralTax !== undefined && medicine.tax.centralTax > 0 && (
-                                <div className="rounded-lg border p-3">
-                                  <p className="text-sm text-muted-foreground">Central Tax</p>
-                                  <p className="font-medium">{medicine.tax.centralTax}%</p>
-                                </div>
-                              )}
-                              {medicine.tax.oldTax !== undefined && medicine.tax.oldTax > 0 && (
-                                <div className="rounded-lg border p-3">
-                                  <p className="text-sm text-muted-foreground">Old Tax</p>
-                                  <p className="font-medium">{medicine.tax.oldTax}%</p>
-                                </div>
-                              )}
-                              {medicine.tax.taxDiff !== undefined && medicine.tax.taxDiff !== 0 && (
-                                <div className="rounded-lg border p-3">
-                                  <p className="text-sm text-muted-foreground">Tax Difference</p>
-                                  <p className="font-medium">{medicine.tax.taxDiff}%</p>
-                                </div>
-                              )}
                             </div>
                           </div>
                         </>
@@ -863,154 +754,6 @@ export default function MedicineDetailPage() {
                                   <p className="font-medium">{medicine.regulatory.scheduleType}</p>
                                 </div>
                               )}
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Tax Information */}
-                      {medicine.tax && (
-                        <>
-                          <Separator />
-                          <div>
-                            <h4 className="mb-2 font-medium">Tax Information</h4>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              {medicine.tax.hsnCode && (
-                                <div className="rounded-lg border p-3">
-                                  <p className="text-sm text-muted-foreground">HSN Code</p>
-                                  <p className="font-medium">{medicine.tax.hsnCode}</p>
-                                </div>
-                              )}
-                              <div className="rounded-lg border p-3">
-                                <p className="text-sm text-muted-foreground">SGST</p>
-                                <p className="font-medium">{medicine.tax.sgst}%</p>
-                              </div>
-                              <div className="rounded-lg border p-3">
-                                <p className="text-sm text-muted-foreground">CGST</p>
-                                <p className="font-medium">{medicine.tax.cgst}%</p>
-                              </div>
-                              <div className="rounded-lg border p-3">
-                                <p className="text-sm text-muted-foreground">IGST</p>
-                                <p className="font-medium">{medicine.tax.igst}%</p>
-                              </div>
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Stock Information */}
-                      <Separator />
-                      <div>
-                        <h4 className="mb-2 font-medium">Stock Information</h4>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-lg border p-3">
-                            <p className="text-sm text-muted-foreground">Available Quantity</p>
-                            <p className="font-medium">{stockQuantity} {medicine.stock.unit || 'units'}</p>
-                          </div>
-                          {medicine.stock.minOrderQuantity && (
-                            <div className="rounded-lg border p-3">
-                              <p className="text-sm text-muted-foreground">Min Order Quantity</p>
-                              <p className="font-medium">{medicine.stock.minOrderQuantity}</p>
-                            </div>
-                          )}
-                          {medicine.stock.maxOrderQuantity && (
-                            <div className="rounded-lg border p-3">
-                              <p className="text-sm text-muted-foreground">Max Order Quantity</p>
-                              <p className="font-medium">{medicine.stock.maxOrderQuantity}</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="storage" className="mt-6">
-                <Card>
-                  <CardContent className="p-6">
-                    <h3 className="mb-4 text-lg font-semibold">Storage & Handling</h3>
-                    <div className="space-y-4">
-                      {(medicine.storageConditions || medicine.packaging.storageInstructions) && (
-                        <div>
-                          <h4 className="mb-2 font-medium">Storage Conditions</h4>
-                          <p className="text-muted-foreground leading-relaxed">
-                            {medicine.storageConditions || medicine.packaging.storageInstructions}
-                          </p>
-                        </div>
-                      )}
-
-                      <Separator />
-
-                      <div>
-                        <h4 className="mb-2 font-medium">Packaging Information</h4>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-lg border p-3">
-                            <p className="text-sm text-muted-foreground">Pack Size</p>
-                            <p className="font-medium">{medicine.packaging.packSize}</p>
-                          </div>
-                          {medicine.packaging.packType && (
-                            <div className="rounded-lg border p-3">
-                              <p className="text-sm text-muted-foreground">Pack Type</p>
-                              <p className="font-medium">{medicine.packaging.packType}</p>
-                            </div>
-                          )}
-                          {medicine.packaging.expiryDate && (
-                            <div className="rounded-lg border p-3">
-                              <p className="text-sm text-muted-foreground">Expiry Date</p>
-                              <p className="font-medium">{format(new Date(medicine.packaging.expiryDate), "PPP")}</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {(medicine.regulatory?.drugType || medicine.regulatory?.drugLicenseNumber || medicine.regulatory?.scheduleType) && (
-                        <>
-                          <Separator />
-                          <div>
-                            <h4 className="mb-2 font-medium">Regulatory Information</h4>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              {medicine.regulatory.drugType && (
-                                <div className="rounded-lg border p-3">
-                                  <p className="text-sm text-muted-foreground">Drug Type</p>
-                                  <p className="font-medium">{medicine.regulatory.drugType}</p>
-                                </div>
-                              )}
-                              {medicine.regulatory.drugLicenseNumber && (
-                                <div className="rounded-lg border p-3">
-                                  <p className="text-sm text-muted-foreground">Drug License Number</p>
-                                  <p className="font-medium">{medicine.regulatory.drugLicenseNumber}</p>
-                                </div>
-                              )}
-                              {medicine.regulatory.scheduleType && (
-                                <div className="rounded-lg border p-3">
-                                  <p className="text-sm text-muted-foreground">Schedule Type</p>
-                                  <p className="font-medium">{medicine.regulatory.scheduleType}</p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {medicine.tax && (
-                        <>
-                          <Separator />
-                          <div>
-                            <h4 className="mb-2 font-medium">Tax Information</h4>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              <div className="rounded-lg border p-3">
-                                <p className="text-sm text-muted-foreground">HSN Code</p>
-                                <p className="font-medium">{medicine.tax.hsnCode}</p>
-                              </div>
-                              <div className="rounded-lg border p-3">
-                                <p className="text-sm text-muted-foreground">HSN Name</p>
-                                <p className="font-medium">{medicine.tax.hsnName}</p>
-                              </div>
-                              <div className="rounded-lg border p-3">
-                                <p className="text-sm text-muted-foreground">GST Rate</p>
-                                <p className="font-medium">{medicine.tax.igst}% (SGST: {medicine.tax.sgst}% + CGST: {medicine.tax.cgst}%)</p>
-                              </div>
                             </div>
                           </div>
                         </>

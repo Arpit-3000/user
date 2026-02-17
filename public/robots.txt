@@ -1,0 +1,13 @@
+# robots.txt for ArogyaRx
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /_next/
+Disallow: /checkout/
+
+# Sitemap
+Sitemap: https://arogyarx.com/sitemap.xml
+
+# Crawl-delay
+Crawl-delay: 1

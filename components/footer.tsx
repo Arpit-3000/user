@@ -48,18 +48,21 @@ export function Footer() {
               Your trusted healthcare partner for medicines, lab tests, and doctor consultations. Quality healthcare
               accessible to everyone.
             </p>
+            <p className="mt-4 text-sm text-muted-foreground">
+              © {new Date().getFullYear()} ArogyaRx. All rights reserved. | Licensed Healthcare Provider
+            </p>
             <div className="mt-6 space-y-2 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-primary" />
-                <span>1800-123-4567 (Toll Free)</span>
+                <span>93074455945</span>
               </div>
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-primary" />
-                <span>support@arogyarx.com</span>
+                <span>lalitamedicos1986@gmail.com</span>
               </div>
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-primary" />
-                <span>Mumbai, Maharashtra, India</span>
+                <span>KHATRI PATHSHALA MARKET (179, ATTARSUIYA), ALLAHABAD PIN CODE 211003</span>
               </div>
             </div>
           </div>
@@ -79,13 +82,6 @@ export function Footer() {
               </ul>
             </div>
           ))}
-        </div>
-
-        <div className="mt-12 border-t pt-8 text-center text-sm text-muted-foreground">
-          <p>
-            © {new Date().getFullYear()} ArogyaRx. All rights reserved. |{" "}
-            <span className="font-medium">Licensed Healthcare Provider</span>
-          </p>
         </div>
       </div>
     </footer>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { isAuthenticated } from "@/lib/auth-utils"
+import { useToast } from "@/hooks/use-toast"
 
 interface AuthGuardProps {
   children: React.ReactNode
@@ -11,6 +12,7 @@ interface AuthGuardProps {
 export function AuthGuard({ children }: AuthGuardProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const { toast } = useToast()
   const [isChecking, setIsChecking] = useState(true)
 
   useEffect(() => {
@@ -20,7 +22,16 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
       if (!authenticated && !isAuthPage) {
         // Not authenticated and trying to access protected page
-        router.push("/login")
+        toast({
+          title: "Login Required",
+          description: "Please login to access this page. Redirecting to login...",
+          variant: "destructive",
+        })
+        
+        // Redirect after 5 seconds
+        setTimeout(() => {
+          router.push("/login")
+        }, 5000)
       } else if (authenticated && isAuthPage) {
         // Authenticated but on auth page, redirect to home
         router.push("/")
@@ -30,7 +41,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
     }
 
     checkAuth()
-  }, [pathname, router])
+  }, [pathname, router, toast])
 
   if (isChecking) {
     return (

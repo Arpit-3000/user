@@ -3,7 +3,7 @@ import { API_BASE_URL } from '../api-config';
 // Helper function to get auth token
 const getAuthToken = (): string | null => {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('authToken');
+  return localStorage.getItem('token');
 };
 
 // ============================================================================
@@ -267,7 +267,7 @@ export async function getOrders(page = 1, limit = 10): Promise<OrdersResponse> {
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/orders/simple?page=${page}&limit=${limit}`, {
+  const response = await fetch(`${API_BASE_URL}/orders/?page=${page}&limit=${limit}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
     },

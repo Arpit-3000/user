@@ -223,31 +223,6 @@ export default function OrderDetailPage() {
               {reordering ? 'Adding...' : 'Reorder'}
             </Button>
           )}
-
-          {canCancelOrder(order.status) && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" size="sm" disabled={cancelling}>
-                  <X className="h-4 w-4 mr-2" />
-                  Cancel Order
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Cancel Order</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Are you sure you want to cancel this order? This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>No, Keep Order</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleCancelOrder}>
-                    Yes, Cancel Order
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
         </div>
       </div>
 

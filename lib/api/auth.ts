@@ -43,7 +43,7 @@ export const authApi = {
       const result = await response.json()
 
       if (response.ok && result.token) {
-        localStorage.setItem("authToken", result.token)
+        localStorage.setItem("token", result.token)
         localStorage.setItem("user", JSON.stringify(result.user))
         return { success: true, ...result }
       }
@@ -64,7 +64,7 @@ export const authApi = {
       const result = await response.json()
 
       if (response.ok && result.token) {
-        localStorage.setItem("authToken", result.token)
+        localStorage.setItem("token", result.token)
         localStorage.setItem("user", JSON.stringify(result.user))
         return { success: true, ...result }
       }
@@ -85,7 +85,7 @@ export const authApi = {
       const result = await response.json()
 
       if (response.ok && result.success) {
-        localStorage.setItem("authToken", result.token)
+        localStorage.setItem("token", result.token)
         localStorage.setItem("user", JSON.stringify(result.user))
       }
 
@@ -105,7 +105,7 @@ export const authApi = {
       const result = await response.json()
 
       if (response.ok) {
-        localStorage.setItem("authToken", result.token)
+        localStorage.setItem("token", result.token)
         localStorage.setItem("user", JSON.stringify(result.user))
       }
 
@@ -127,7 +127,7 @@ export const authApi = {
   },
 
   logout: () => {
-    localStorage.removeItem("authToken")
+    localStorage.removeItem("token")
     localStorage.removeItem("user")
     window.location.href = "/login"
   },

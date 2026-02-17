@@ -91,7 +91,9 @@ export function BannerCarousel({ page = "all" }: BannerCarouselProps) {
 
   if (loading) {
     return (
-      <div className="relative w-full h-[300px] md:h-[400px] bg-muted animate-pulse rounded-xl" />
+      <div className="container px-4 py-6 md:px-6">
+        <div className="relative w-full h-[400px] md:h-[500px] lg:h-[600px] bg-muted animate-pulse rounded-2xl" />
+      </div>
     )
   }
 
@@ -100,38 +102,39 @@ export function BannerCarousel({ page = "all" }: BannerCarouselProps) {
   }
 
   return (
-    <div className="relative w-full h-[300px] md:h-[400px] rounded-xl overflow-hidden group">
-      {/* Banner Images */}
-      {banners.map((banner, index) => (
-        <div
-          key={banner._id}
-          className={`absolute inset-0 transition-opacity duration-500 ${
-            index === currentIndex ? "opacity-100" : "opacity-0"
-          }`}
-          onClick={() => handleBannerClick(banner)}
-          style={{ cursor: banner.itemId ? "pointer" : "default" }}
-        >
-          <img
-            src={banner.image.url}
-            alt={banner.offerName}
-            className="w-full h-full object-cover"
-          />
+    <div className="container px-4 py-6 md:px-6">
+      <div className="relative w-full h-[400px] md:h-[500px] lg:h-[600px] overflow-hidden rounded-2xl group">
+        {/* Banner Images */}
+        {banners.map((banner, index) => (
+          <div
+            key={banner._id}
+            className={`absolute inset-0 transition-opacity duration-500 ${
+              index === currentIndex ? "opacity-100" : "opacity-0"
+            }`}
+            onClick={() => handleBannerClick(banner)}
+            style={{ cursor: banner.itemId ? "pointer" : "default" }}
+          >
+            <img
+              src={banner.image.url}
+              alt={banner.offerName}
+              className="w-full h-full object-cover object-center"
+            />
           
           {/* Gradient Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
           
           {/* Banner Content */}
-          <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8 text-white">
-            <h2 className="text-2xl md:text-4xl font-bold mb-2 drop-shadow-lg">
+          <div className="absolute bottom-0 left-0 right-0 p-8 md:p-12 lg:p-16 text-white max-w-7xl mx-auto">
+            <h2 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-3 drop-shadow-lg">
               {banner.offerName}
             </h2>
-            <p className="text-sm md:text-lg mb-4 max-w-2xl drop-shadow-md">
+            <p className="text-base md:text-xl lg:text-2xl mb-6 max-w-3xl drop-shadow-md">
               {banner.description}
             </p>
             {banner.itemId && (
               <Button
                 size="lg"
-                className="bg-white text-primary hover:bg-white/90"
+                className="bg-white text-primary hover:bg-white/90 text-base md:text-lg px-8 py-6"
                 onClick={(e) => {
                   e.stopPropagation()
                   handleBannerClick(banner)
@@ -180,6 +183,7 @@ export function BannerCarousel({ page = "all" }: BannerCarouselProps) {
           </div>
         </>
       )}
+      </div>
     </div>
   )
 }

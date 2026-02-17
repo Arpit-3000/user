@@ -192,48 +192,45 @@ export function Navbar() {
         </Link>
 
         {/* Desktop Navigation */}
-        {authenticated && (
-          <nav className="hidden items-center gap-6 text-sm font-medium md:flex">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={cn(
-                  "flex items-center gap-1.5 transition-colors hover:text-primary",
-                  pathname === link.href ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                <link.icon className="h-4 w-4" />
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-        )}
+        <nav className="hidden items-center gap-6 text-sm font-medium md:flex">
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={cn(
+                "flex items-center gap-1.5 transition-colors hover:text-primary",
+                pathname === link.href ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <link.icon className="h-4 w-4" />
+              {link.label}
+            </Link>
+          ))}
+        </nav>
 
         {/* Search Bar with Autocomplete */}
-        {authenticated && (
-          <div className="ml-auto flex flex-1 items-center gap-2 md:ml-4 md:max-w-md" ref={searchRef}>
-            <div className="relative w-full">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search medicines, tests, doctors..."
-                className="w-full pl-9 pr-9"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => searchQuery.length >= 2 && setShowSearchResults(true)}
-              />
-              {searchQuery && (
-                <button
-                  onClick={clearSearch}
-                  className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-              {searchLoading && (
-                <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-primary" />
-              )}
+        <div className="ml-auto flex flex-1 items-center gap-2 md:ml-4 md:max-w-md" ref={searchRef}>
+          <div className="relative w-full">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search medicines, tests, doctors..."
+              className="w-full pl-9 pr-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => searchQuery.length >= 2 && setShowSearchResults(true)}
+            />
+            {searchQuery && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+            {searchLoading && (
+              <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-primary" />
+            )}
 
               {/* Search Results Dropdown */}
               {showSearchResults && searchResults && getTotalResults() > 0 && (
@@ -377,7 +374,6 @@ export function Navbar() {
               )}
             </div>
           </div>
-        )}
 
         {/* Actions */}
         <div className="flex items-center gap-2 ml-auto">
@@ -583,14 +579,45 @@ export function Navbar() {
                     </div>
                   </>
                 ) : (
-                  <div className="p-6">
-                    <Button asChild className="w-full" size="lg">
-                      <Link href="/login" onClick={() => setIsOpen(false)}>
-                        <LogIn className="mr-2 h-5 w-5" />
-                        Login to Continue
-                      </Link>
-                    </Button>
-                  </div>
+                  <>
+                    {/* Navigation Links for Non-Authenticated Users */}
+                    <nav className="flex-1 overflow-y-auto p-4">
+                      <div className="space-y-1">
+                        {/* Main Navigation Links */}
+                        {navLinks.map((link) => (
+                          <Link
+                            key={link.href}
+                            href={link.href}
+                            className={cn(
+                              "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
+                              pathname === link.href 
+                                ? "bg-primary/10 text-primary font-medium" 
+                                : "hover:bg-accent"
+                            )}
+                            onClick={() => setIsOpen(false)}
+                          >
+                            <div className={cn(
+                              "flex h-10 w-10 items-center justify-center rounded-lg",
+                              pathname === link.href ? "bg-primary/20" : "bg-muted"
+                            )}>
+                              <link.icon className="h-5 w-5" />
+                            </div>
+                            <span className="text-base">{link.label}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </nav>
+
+                    {/* Login Button */}
+                    <div className="p-4 border-t bg-muted/30">
+                      <Button asChild className="w-full" size="lg">
+                        <Link href="/login" onClick={() => setIsOpen(false)}>
+                          <LogIn className="mr-2 h-5 w-5" />
+                          Login to Continue
+                        </Link>
+                      </Button>
+                    </div>
+                  </>
                 )}
               </div>
             </SheetContent>

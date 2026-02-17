@@ -1,6 +1,6 @@
 export const getAuthToken = (): string | null => {
   if (typeof window === "undefined") return null
-  return localStorage.getItem("authToken")
+  return localStorage.getItem("token")
 }
 
 export const getUser = (): any | null => {
@@ -29,6 +29,7 @@ export const isAuthenticated = (): boolean => {
 
 export const clearAuth = () => {
   if (typeof window === "undefined") return
-  localStorage.removeItem("authToken")
+  localStorage.removeItem("token")
   localStorage.removeItem("user")
 }
+

@@ -331,10 +331,10 @@ export default function CartPage() {
                           <div className="flex items-center gap-2">
                             {product.mrp > product.price && (
                               <span className="text-sm text-muted-foreground line-through">
-                                ₹{product.mrp * item.quantity}
+                                ₹{(product.mrp * item.quantity).toFixed(2)}
                               </span>
                             )}
-                            <span className="font-bold text-lg">₹{itemTotal}</span>
+                            <span className="font-bold text-lg">₹{itemTotal.toFixed(2)}</span>
                           </div>
                         </div>
                       </div>
@@ -344,7 +344,7 @@ export default function CartPage() {
                           <div className="flex items-center gap-2 text-sm">
                             <Calendar className="h-4 w-4 text-blue-600" />
                             <span className="font-medium">Home Collection</span>
-                            <span className="text-muted-foreground">+₹{item.homeCollectionPrice}</span>
+                            <span className="text-muted-foreground">+₹{item.homeCollectionPrice?.toFixed(2)}</span>
                           </div>
                           {item.preferredDate && (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -382,14 +382,14 @@ export default function CartPage() {
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal ({totalItems} items)</span>
-                  <span className="font-medium">₹{totalPrice}</span>
+                  <span className="font-medium">₹{totalPrice.toFixed(2)}</span>
                 </div>
                 
                 <Separator />
                 
                 <div className="flex justify-between text-lg font-bold">
                   <span>Total</span>
-                  <span>₹{totalPrice}</span>
+                  <span>₹{totalPrice.toFixed(2)}</span>
                 </div>
               </div>
 

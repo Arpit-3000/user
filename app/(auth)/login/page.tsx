@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Mail, Lock, Phone, Pill } from "lucide-react"
+import { Mail, Lock, Phone, Pill, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { authApi } from "@/lib/api/auth"
 import { useToast } from "@/hooks/use-toast"
+import { usePhoneAuth } from "@/hooks/use-phone-auth"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -23,6 +24,20 @@ export default function LoginPage() {
   const [phoneLogin, setPhoneLogin] = React.useState({ phone: "" })
   const [otpSent, setOtpSent] = React.useState(false)
   const [otp, setOtp] = React.useState("")
+
+  const { 
+    loading: phoneLoading, 
+    error: phoneError, 
+    sendOTP, 
+    verifyOTP, 
+    loginWithPhone 
+  } = usePhoneAuth()
+
+  React.useEffect(() => {
+    if (phoneError) {
+      setError(phoneError)
+    }
+  }, [phoneError])
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,30 +68,80 @@ export default function LoginPage() {
 
   const handlePhoneLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError("")
 
     if (!otpSent) {
+      // Send OTP
       setLoading(true)
-      // Simulate sending OTP
-      setTimeout(() => {
+      const phoneNumber = `+91${phoneLogin.phone}`
+      const result = await sendOTP(phoneNumber)
+      setLoading(false)
+
+      if (result.success) {
         setOtpSent(true)
-        setLoading(false)
         toast({
           title: "OTP Sent",
           description: "Please check your phone for the verification code.",
         })
-      }, 1000)
+      } else {
+        setError(result.error || "Failed to send OTP")
+      }
     } else {
+      // Verify OTP and login
       setLoading(true)
-      // Simulate verifying OTP
-      setTimeout(() => {
-        setLoading(false)
-        router.push("/")
-      }, 1500)
+      const verifyResult = await verifyOTP(otp)
+      
+      if (verifyResult.success && verifyResult.idToken) {
+        const loginResult = await loginWithPhone(verifyResult.idToken)
+        
+        if (loginResult.success) {
+          toast({
+            title: "Login successful",
+            description: "Welcome back to ArogyaRx!",
+          })
+          router.push("/")
+        } else if (loginResult.needsRegistration) {
+          setError("Phone number not registered. Please sign up first.")
+        } else {
+          setError(loginResult.error || "Login failed")
+        }
+      } else {
+        setError(verifyResult.error || "Invalid OTP")
+      }
+      setLoading(false)
+    }
+  }
+
+  const handleResendOTP = async () => {
+    setError("")
+    setLoading(true)
+    const phoneNumber = `+91${phoneLogin.phone}`
+    const result = await sendOTP(phoneNumber)
+    setLoading(false)
+
+    if (result.success) {
+      toast({
+        title: "OTP Resent",
+        description: "A new verification code has been sent to your phone.",
+      })
+    } else {
+      setError(result.error || "Failed to resend OTP")
     }
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12 relative overflow-hidden">
+      {/* Back Button */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="absolute top-4 left-4 z-20"
+        onClick={() => router.push("/")}
+      >
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        Back to Home
+      </Button>
+
       {/* Animated background elements - Medical themed */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {/* Floating medical icons/shapes */}
@@ -99,8 +164,25 @@ export default function LoginPage() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-primary/3 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '5s', animationDelay: '2s' }}></div>
       </div>
 
-      <div className="w-full max-w-md relative z-10">
-        <div className="mb-8 text-center animate-in fade-in slide-in-from-top-4 duration-700">
+      <div 
+        className="w-full max-w-md relative z-10"
+        style={{
+          animation: 'slideUp 0.6s ease-out',
+        }}
+      >
+        <style jsx>{`
+          @keyframes slideUp {
+            from {
+              opacity: 0;
+              transform: translateY(100px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+        `}</style>
+        <div className="mb-8 text-center">
           <Link href="/" className="inline-flex items-center justify-center gap-2 group">
             <img 
               src="/logo.png" 
@@ -108,20 +190,20 @@ export default function LoginPage() {
               className="h-16 w-auto transition-transform group-hover:scale-110 duration-300"
             />
           </Link>
-          <h1 className="mt-6 text-3xl font-bold text-balance animate-in fade-in slide-in-from-top-4 duration-700" style={{ animationDelay: '100ms' }}>
+          <h1 className="mt-6 text-3xl font-bold text-balance">
             Welcome to ArogyaRx
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground text-balance animate-in fade-in slide-in-from-top-4 duration-700" style={{ animationDelay: '200ms' }}>
+          <p className="mt-2 text-sm text-muted-foreground text-balance">
             Sign in to access your healthcare dashboard
           </p>
         </div>
 
-        <Card className="shadow-2xl border animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ animationDelay: '300ms' }}>
-          <CardHeader className="animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ animationDelay: '400ms' }}>
+        <Card className="shadow-2xl border">
+          <CardHeader>
             <CardTitle className="text-2xl">Sign In</CardTitle>
             <CardDescription>Choose your preferred login method</CardDescription>
           </CardHeader>
-          <CardContent className="animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ animationDelay: '500ms' }}>
+          <CardContent>
             <Tabs defaultValue="email" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="email">Email</TabsTrigger>
@@ -188,6 +270,9 @@ export default function LoginPage() {
 
               <TabsContent value="phone">
                 <form onSubmit={handlePhoneLogin} className="space-y-4">
+                  {/* Hidden reCAPTCHA container */}
+                  <div id="recaptcha-container"></div>
+
                   <div className="space-y-2">
                     <Label htmlFor="phone">Phone Number</Label>
                     <div className="relative">
@@ -199,12 +284,18 @@ export default function LoginPage() {
                         placeholder="98765 43210"
                         className="pl-[4.5rem]"
                         value={phoneLogin.phone}
-                        onChange={(e) => setPhoneLogin({ ...phoneLogin, phone: e.target.value })}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, "")
+                          setPhoneLogin({ ...phoneLogin, phone: value })
+                        }}
                         disabled={otpSent}
                         required
                         maxLength={10}
                       />
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Enter your 10-digit mobile number
+                    </p>
                   </div>
 
                   {otpSent && (
@@ -216,26 +307,50 @@ export default function LoginPage() {
                         placeholder="123456"
                         maxLength={6}
                         value={otp}
-                        onChange={(e) => setOtp(e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, "")
+                          setOtp(value)
+                        }}
                         required
                       />
                       <p className="text-xs text-muted-foreground">
-                        OTP sent to {phoneLogin.phone}.{" "}
-                        <button type="button" className="text-primary hover:underline">
+                        OTP sent to +91{phoneLogin.phone}.{" "}
+                        <button 
+                          type="button" 
+                          className="text-primary hover:underline"
+                          onClick={handleResendOTP}
+                          disabled={loading || phoneLoading}
+                        >
                           Resend OTP
                         </button>
                       </p>
                     </div>
                   )}
 
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? (
+                  {otpSent && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => {
+                        setOtpSent(false)
+                        setOtp("")
+                        setPhoneLogin({ phone: "" })
+                        setError("")
+                      }}
+                    >
+                      Change Phone Number
+                    </Button>
+                  )}
+
+                  <Button type="submit" className="w-full" disabled={loading || phoneLoading}>
+                    {loading || phoneLoading ? (
                       <span className="flex items-center gap-2">
                         <span className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></span>
-                        Processing...
+                        {otpSent ? "Verifying..." : "Sending OTP..."}
                       </span>
                     ) : otpSent ? (
-                      "Verify OTP"
+                      "Verify OTP & Login"
                     ) : (
                       "Send OTP"
                     )}
