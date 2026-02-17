@@ -22,10 +22,13 @@ import {
   Plus,
   Home,
   Briefcase,
+  User,
 } from "lucide-react"
 import { format } from "date-fns"
 import { profileApi, type Address } from "@/lib/api/profile"
 import { useToast } from "@/hooks/use-toast"
+
+import { ImageCropper } from "@/components/image-cropper"
 
 export default function ProfilePage() {
   const { toast } = useToast()
@@ -35,6 +38,10 @@ export default function ProfilePage() {
   const [profile, setProfile] = React.useState<any>(null)
   const [addresses, setAddresses] = React.useState<Address[]>([])
   const [showAddressForm, setShowAddressForm] = React.useState(false)
+  
+  // Image cropper states
+  const [imageToCrop, setImageToCrop] = React.useState<string | null>(null)
+  const [showCropper, setShowCropper] = React.useState(false)
 
   // Check authentication on mount
   React.useEffect(() => {
@@ -44,8 +51,7 @@ export default function ProfilePage() {
   }, [router])
 
   const [profileForm, setProfileForm] = React.useState({
-    firstName: "",
-    lastName: "",
+    name: "",
     email: "",
     contact: "",
     gender: "",
@@ -80,13 +86,20 @@ export default function ProfilePage() {
   const loadProfile = async () => {
     try {
       const data = await profileApi.get()
-      console.log("Profile data loaded:", data) // Debug log
+      console.log("Profile data loaded:", data)
+      console.log("Profile image data:", data?.profileImage) // Debug profile image
       setProfile(data)
+      
+      // Clean contact number for display (remove +91 if present)
+      let displayContact = data.contact || ""
+      if (displayContact.startsWith("+91")) {
+        displayContact = displayContact.substring(3)
+      }
+      
       setProfileForm({
-        firstName: data.firstName || "",
-        lastName: data.lastName || "",
+        name: data.name || "",
         email: data.email || "",
-        contact: data.contact || "",
+        contact: displayContact,
         gender: data.gender || "",
         dob: data.dob || "",
         street: data.address?.street || "",
@@ -124,10 +137,9 @@ export default function ProfilePage() {
 
     try {
       const result = await profileApi.update({
-        firstName: profileForm.firstName,
-        lastName: profileForm.lastName,
+        name: profileForm.name,
         email: profileForm.email,
-        contact: profileForm.contact,
+        // contact is not editable, so don't send it
         gender: profileForm.gender,
         dob: profileForm.dob,
         address: {
@@ -180,25 +192,47 @@ export default function ProfilePage() {
       return
     }
 
+    // Create a preview URL for cropping
+    const reader = new FileReader()
+    reader.onload = () => {
+      setImageToCrop(reader.result as string)
+      setShowCropper(true)
+    }
+    reader.readAsDataURL(file)
+    
+    // Reset the input
+    e.target.value = ""
+  }
+
+  const handleCropComplete = async (croppedImageBlob: Blob) => {
+    setShowCropper(false)
     setUpdating(true)
+    
     try {
-      const result = await profileApi.uploadProfileImage(file)
-      console.log("Image upload result:", result) // Debug log
+      // Convert blob to file
+      const croppedFile = new File([croppedImageBlob], "profile-image.jpg", {
+        type: "image/jpeg",
+      })
+      
+      const result = await profileApi.uploadProfileImage(croppedFile)
+      console.log("Image upload result:", result)
+      
       if (result.success) {
         const newProfileImage = result.profileImage || result.user?.profileImage
+        console.log("New profile image:", newProfileImage)
+        
         toast({
           title: "Success",
           description: "Profile image updated successfully",
         })
-        // Update profile state immediately with new image
-        setProfile((prev: any) => ({
-          ...prev,
-          profileImage: newProfileImage,
-        }))
-        // Update localStorage using helper function
-        updateUserProfile({ profileImage: newProfileImage })
-        // Trigger a page reload event to update navbar
-        window.dispatchEvent(new Event("storage"))
+        
+        // Update localStorage with new image
+        if (newProfileImage) {
+          updateUserProfile({ profileImage: newProfileImage })
+        }
+        
+        // Reload the page to show updated image everywhere
+        window.location.reload()
       } else {
         toast({
           title: "Error",
@@ -215,7 +249,13 @@ export default function ProfilePage() {
       })
     } finally {
       setUpdating(false)
+      setImageToCrop(null)
     }
+  }
+
+  const handleCropCancel = () => {
+    setShowCropper(false)
+    setImageToCrop(null)
   }
 
   const handleDeleteImage = async () => {
@@ -359,7 +399,17 @@ export default function ProfilePage() {
 
   return (
     <div className="container px-4 py-8 md:px-6">
-          <div className="mb-8">
+      {/* Image Cropper Dialog */}
+      {imageToCrop && (
+        <ImageCropper
+          image={imageToCrop}
+          onCropComplete={handleCropComplete}
+          onCancel={handleCropCancel}
+          open={showCropper}
+        />
+      )}
+
+      <div className="mb-8">
             <h1 className="text-3xl font-bold">My Profile</h1>
             <p className="mt-2 text-muted-foreground">Manage your account and preferences</p>
           </div>
@@ -371,9 +421,17 @@ export default function ProfilePage() {
                   <div className="relative">
                     <Avatar className="h-24 w-24">
                       <AvatarImage 
-                        src={profile?.profileImage?.url || profile?.profileImage || "/placeholder-user.jpg"} 
+                        src={
+                          profile?.profileImage?.url || 
+                          (typeof profile?.profileImage === 'string' ? profile?.profileImage : null) || 
+                          "/placeholder-user.jpg"
+                        } 
                         alt={profile?.name || "User"}
                         className="object-cover"
+                        onError={(e) => {
+                          console.log("Image load error:", profile?.profileImage)
+                          e.currentTarget.src = "/placeholder-user.jpg"
+                        }}
                       />
                       <AvatarFallback className="text-2xl">{getInitials(profile?.name || "User")}</AvatarFallback>
                     </Avatar>
@@ -434,10 +492,9 @@ export default function ProfilePage() {
 
             <div className="lg:col-span-3">
               <Tabs defaultValue="personal" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="personal">Personal Info</TabsTrigger>
                   <TabsTrigger value="addresses">Addresses</TabsTrigger>
-                  <TabsTrigger value="security">Security</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="personal" className="mt-6">
@@ -445,21 +502,16 @@ export default function ProfilePage() {
                     <CardContent className="p-6">
                       <h3 className="mb-6 text-lg font-semibold">Personal Information</h3>
                       <form onSubmit={handleUpdateProfile} className="space-y-4">
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label htmlFor="firstName">First Name</Label>
+                        <div className="space-y-2">
+                          <Label htmlFor="name">Full Name</Label>
+                          <div className="relative">
+                            <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
-                              id="firstName"
-                              value={profileForm.firstName}
-                              onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="lastName">Last Name</Label>
-                            <Input
-                              id="lastName"
-                              value={profileForm.lastName}
-                              onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
+                              id="name"
+                              className="pl-9"
+                              placeholder="John Doe"
+                              value={profileForm.name}
+                              onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
                             />
                           </div>
                         </div>
@@ -482,14 +534,20 @@ export default function ProfilePage() {
                           <Label htmlFor="contact">Phone Number</Label>
                           <div className="relative">
                             <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <div className="absolute left-9 top-2.5 text-sm text-muted-foreground">+91</div>
                             <Input
                               id="contact"
                               type="tel"
-                              className="pl-9"
+                              className="pl-[4.5rem] bg-muted cursor-not-allowed"
+                              placeholder="9876543210"
                               value={profileForm.contact}
-                              onChange={(e) => setProfileForm({ ...profileForm, contact: e.target.value })}
+                              disabled
+                              readOnly
                             />
                           </div>
+                          <p className="text-xs text-muted-foreground">
+                            Phone number cannot be changed
+                          </p>
                         </div>
 
                         <div className="grid gap-4 sm:grid-cols-2">
@@ -512,8 +570,11 @@ export default function ProfilePage() {
                               onChange={(e) => setProfileForm({ ...profileForm, gender: e.target.value })}
                             >
                               <option value="">Select Gender</option>
+                              <option value="male">Male</option>
                               <option value="Male">Male</option>
+                              <option value="female">Female</option>
                               <option value="Female">Female</option>
+                              <option value="other">Other</option>
                               <option value="Other">Other</option>
                             </select>
                           </div>
@@ -804,35 +865,6 @@ export default function ProfilePage() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="security" className="mt-6">
-                  <Card>
-                    <CardContent className="p-6">
-                      <h3 className="mb-6 text-lg font-semibold">Security Settings</h3>
-                      <div className="space-y-6">
-                        <div>
-                          <h4 className="mb-3 font-medium">Change Password</h4>
-                          <Alert>
-                            <AlertDescription>
-                              Password change functionality will be available soon. Contact support if you need to reset your password.
-                            </AlertDescription>
-                          </Alert>
-                        </div>
-
-                        <Separator />
-
-                        <div>
-                          <h4 className="mb-3 font-medium">Two-Factor Authentication</h4>
-                          <p className="mb-4 text-sm text-muted-foreground">
-                            Add an extra layer of security to your account
-                          </p>
-                          <Button variant="outline" disabled>
-                            Enable 2FA (Coming Soon)
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
               </Tabs>
             </div>
           </div>

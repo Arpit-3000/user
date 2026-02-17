@@ -35,7 +35,8 @@ export default function RegisterPage() {
     error: phoneError, 
     sendOTP, 
     verifyOTP, 
-    registerUser: registerPhoneUser 
+    registerUser: registerPhoneUser,
+    reset 
   } = usePhoneAuth()
 
   React.useEffect(() => {
@@ -43,6 +44,33 @@ export default function RegisterPage() {
       setError(phoneError)
     }
   }, [phoneError])
+
+  // Check for pre-verified phone from login redirect
+  React.useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const isVerified = urlParams.get("verified") === "true"
+    
+    if (isVerified) {
+      const savedPhone = sessionStorage.getItem("signupPhone")
+      const savedIdToken = sessionStorage.getItem("signupIdToken")
+      
+      if (savedPhone && savedIdToken) {
+        setRegistrationMethod("phone")
+        setPhoneNumber(savedPhone)
+        setFirebaseIdToken(savedIdToken)
+        setOtpSent(true)
+        
+        toast({
+          title: "Phone Verified",
+          description: "Please complete your registration details",
+        })
+        
+        // Clear session storage
+        sessionStorage.removeItem("signupPhone")
+        sessionStorage.removeItem("signupIdToken")
+      }
+    }
+  }, [])
 
   const [formData, setFormData] = React.useState({
     name: "",
@@ -208,6 +236,13 @@ export default function RegisterPage() {
 
   const handleResendOTP = async () => {
     setError("")
+    
+    // Clear existing reCAPTCHA before resending
+    reset()
+    
+    // Wait a bit for cleanup
+    await new Promise(resolve => setTimeout(resolve, 200))
+    
     setLoading(true)
     const fullPhoneNumber = `+91${phoneNumber}`
     const result = await sendOTP(fullPhoneNumber)
@@ -298,10 +333,15 @@ export default function RegisterPage() {
             <CardDescription>Enter your details to create an account</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="email" className="w-full" onValueChange={(value) => {
-              setRegistrationMethod(value as "email" | "phone")
-              setError("")
-            }}>
+            <Tabs 
+              defaultValue={registrationMethod} 
+              value={registrationMethod}
+              className="w-full" 
+              onValueChange={(value) => {
+                setRegistrationMethod(value as "email" | "phone")
+                setError("")
+              }}
+            >
               <TabsList className="grid w-full grid-cols-2 mb-6">
                 <TabsTrigger value="email">Email</TabsTrigger>
                 <TabsTrigger value="phone">Phone</TabsTrigger>
@@ -533,8 +573,8 @@ export default function RegisterPage() {
 
               <TabsContent value="phone">
                 <form onSubmit={handleRegister} className="space-y-4">
-                  {/* Hidden reCAPTCHA container */}
-                  <div id="recaptcha-container"></div>
+                  {/* Hidden reCAPTCHA container - must be visible in DOM */}
+                  <div id="recaptcha-container" className="flex justify-center"></div>
 
                   {error && (
                     <Alert variant="destructive">
@@ -546,84 +586,102 @@ export default function RegisterPage() {
                   <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
                     <h3 className="text-sm font-medium">Phone Verification</h3>
                     
-                    <div className="space-y-2">
-                      <Label htmlFor="phone-register">Phone Number *</Label>
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
+                    {firebaseIdToken ? (
+                      // Already verified from login
+                      <div className="space-y-2">
+                        <Label htmlFor="phone-register">Phone Number *</Label>
+                        <div className="relative">
                           <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                           <div className="absolute left-9 top-2.5 text-sm text-muted-foreground">+91</div>
                           <Input
                             id="phone-register"
                             type="tel"
-                            placeholder="98765 43210"
                             className="pl-[4.5rem]"
                             value={phoneNumber}
-                            onChange={(e) => {
-                              const value = e.target.value.replace(/\D/g, "")
-                              setPhoneNumber(value)
-                            }}
-                            disabled={otpSent || !!firebaseIdToken}
+                            disabled
                             required
-                            maxLength={10}
                           />
                         </div>
-                        {!otpSent && !firebaseIdToken && (
-                          <Button 
-                            type="button" 
-                            onClick={handleSendOTP}
-                            disabled={loading || phoneLoading || phoneNumber.length !== 10}
-                          >
-                            Send OTP
-                          </Button>
+                        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Phone verified successfully
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          <Label htmlFor="phone-register">Phone Number *</Label>
+                          <div className="flex gap-2">
+                            <div className="relative flex-1">
+                              <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                              <div className="absolute left-9 top-2.5 text-sm text-muted-foreground">+91</div>
+                              <Input
+                                id="phone-register"
+                                type="tel"
+                                placeholder="98765 43210"
+                                className="pl-[4.5rem]"
+                                value={phoneNumber}
+                                onChange={(e) => {
+                                  const value = e.target.value.replace(/\D/g, "")
+                                  setPhoneNumber(value)
+                                }}
+                                disabled={otpSent}
+                                required
+                                maxLength={10}
+                              />
+                            </div>
+                            {!otpSent && (
+                              <Button 
+                                type="button" 
+                                onClick={handleSendOTP}
+                                disabled={loading || phoneLoading || phoneNumber.length !== 10}
+                              >
+                                Send OTP
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {otpSent && (
+                          <div className="space-y-2">
+                            <Label htmlFor="otp-register">Enter OTP</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                id="otp-register"
+                                type="text"
+                                placeholder="123456"
+                                maxLength={6}
+                                value={otp}
+                                onChange={(e) => {
+                                  const value = e.target.value.replace(/\D/g, "")
+                                  setOtp(value)
+                                }}
+                                required
+                              />
+                              <Button 
+                                type="button" 
+                                onClick={handleVerifyOTP}
+                                disabled={loading || phoneLoading || otp.length !== 6}
+                              >
+                                Verify
+                              </Button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              OTP sent to +91{phoneNumber}.{" "}
+                              <button 
+                                type="button" 
+                                className="text-primary hover:underline"
+                                onClick={handleResendOTP}
+                                disabled={loading || phoneLoading}
+                              >
+                                Resend OTP
+                              </button>
+                            </p>
+                          </div>
                         )}
-                      </div>
-                    </div>
-
-                    {otpSent && !firebaseIdToken && (
-                      <div className="space-y-2">
-                        <Label htmlFor="otp-register">Enter OTP</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="otp-register"
-                            type="text"
-                            placeholder="123456"
-                            maxLength={6}
-                            value={otp}
-                            onChange={(e) => {
-                              const value = e.target.value.replace(/\D/g, "")
-                              setOtp(value)
-                            }}
-                            required
-                          />
-                          <Button 
-                            type="button" 
-                            onClick={handleVerifyOTP}
-                            disabled={loading || phoneLoading || otp.length !== 6}
-                          >
-                            Verify
-                          </Button>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          OTP sent to +91{phoneNumber}.{" "}
-                          <button 
-                            type="button" 
-                            className="text-primary hover:underline"
-                            onClick={handleResendOTP}
-                            disabled={loading || phoneLoading}
-                          >
-                            Resend OTP
-                          </button>
-                        </p>
-                      </div>
-                    )}
-
-                    {firebaseIdToken && (
-                      <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        Phone verified successfully
-                      </div>
+                      </>
                     )}
                   </div>
 

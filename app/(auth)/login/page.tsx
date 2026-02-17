@@ -30,7 +30,9 @@ export default function LoginPage() {
     error: phoneError, 
     sendOTP, 
     verifyOTP, 
-    loginWithPhone 
+    loginWithPhone,
+    cleanup,
+    reset 
   } = usePhoneAuth()
 
   React.useEffect(() => {
@@ -38,6 +40,13 @@ export default function LoginPage() {
       setError(phoneError)
     }
   }, [phoneError])
+
+  // Cleanup on unmount
+  React.useEffect(() => {
+    return () => {
+      cleanup()
+    }
+  }, [cleanup])
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -101,7 +110,20 @@ export default function LoginPage() {
           })
           router.push("/")
         } else if (loginResult.needsRegistration) {
-          setError("Phone number not registered. Please sign up first.")
+          // Redirect to signup with phone number and idToken
+          toast({
+            title: "Account not found",
+            description: "Redirecting to signup...",
+          })
+          
+          // Store phone number and idToken in sessionStorage for signup page
+          sessionStorage.setItem("signupPhone", phoneLogin.phone)
+          sessionStorage.setItem("signupIdToken", verifyResult.idToken)
+          
+          // Redirect to register page
+          setTimeout(() => {
+            router.push("/register?verified=true")
+          }, 1000)
         } else {
           setError(loginResult.error || "Login failed")
         }
@@ -114,6 +136,13 @@ export default function LoginPage() {
 
   const handleResendOTP = async () => {
     setError("")
+    
+    // Clear existing reCAPTCHA before resending
+    reset()
+    
+    // Wait a bit for cleanup
+    await new Promise(resolve => setTimeout(resolve, 200))
+    
     setLoading(true)
     const phoneNumber = `+91${phoneLogin.phone}`
     const result = await sendOTP(phoneNumber)
@@ -270,8 +299,14 @@ export default function LoginPage() {
 
               <TabsContent value="phone">
                 <form onSubmit={handlePhoneLogin} className="space-y-4">
-                  {/* Hidden reCAPTCHA container */}
-                  <div id="recaptcha-container"></div>
+                  {error && (
+                    <div className="text-center py-2 text-sm text-red-600 dark:text-red-400">
+                      {error}
+                    </div>
+                  )}
+
+                  {/* Hidden reCAPTCHA container - must be visible in DOM */}
+                  <div id="recaptcha-container" className="flex justify-center"></div>
 
                   <div className="space-y-2">
                     <Label htmlFor="phone">Phone Number</Label>
@@ -333,6 +368,7 @@ export default function LoginPage() {
                       variant="outline"
                       className="w-full"
                       onClick={() => {
+                        reset() // Clear reCAPTCHA and reset state
                         setOtpSent(false)
                         setOtp("")
                         setPhoneLogin({ phone: "" })

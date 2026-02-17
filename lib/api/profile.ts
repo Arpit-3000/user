@@ -34,6 +34,7 @@ export const profileApi = {
   },
 
   update: async (data: {
+    name?: string
     firstName?: string
     lastName?: string
     dob?: string

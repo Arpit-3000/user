@@ -14,6 +14,31 @@ export const usePhoneAuth = () => {
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null)
   const [recaptchaVerifier, setRecaptchaVerifier] = useState<RecaptchaVerifier | null>(null)
 
+  // Cleanup function
+  const cleanup = () => {
+    if (recaptchaVerifier) {
+      try {
+        recaptchaVerifier.clear()
+        setRecaptchaVerifier(null)
+        // Clear the container
+        const element = document.getElementById("recaptcha-container")
+        if (element) {
+          element.innerHTML = ''
+        }
+      } catch (e) {
+        console.log("Error during cleanup:", e)
+      }
+    }
+  }
+
+  // Reset function for changing phone number
+  const reset = () => {
+    cleanup()
+    setConfirmationResult(null)
+    setError(null)
+    setLoading(false)
+  }
+
   // Setup reCAPTCHA
   const setupRecaptcha = (elementId: string) => {
     try {
@@ -21,23 +46,41 @@ export const usePhoneAuth = () => {
         throw new Error("Firebase is not configured. Please add Firebase credentials to .env.local")
       }
 
-      const verifier = new RecaptchaVerifier(
-        elementId,
-        {
-          size: "invisible",
-          callback: () => {
-            console.log("reCAPTCHA solved")
-          },
-          "expired-callback": () => {
-            console.log("reCAPTCHA expired")
-          },
+      // Check if element exists in DOM
+      const element = document.getElementById(elementId)
+      if (!element) {
+        throw new Error(`Element with id '${elementId}' not found in DOM`)
+      }
+
+      // Clear any existing reCAPTCHA and its DOM content
+      if (recaptchaVerifier) {
+        try {
+          recaptchaVerifier.clear()
+          setRecaptchaVerifier(null)
+        } catch (e) {
+          console.log("Error clearing previous reCAPTCHA:", e)
+        }
+      }
+
+      // Clear the container's innerHTML to remove any leftover reCAPTCHA elements
+      element.innerHTML = ''
+
+      // Firebase v9+ modular syntax
+      const verifier = new RecaptchaVerifier(auth, elementId, {
+        size: "invisible",
+        callback: () => {
+          console.log("reCAPTCHA solved")
         },
-        auth
-      )
+        "expired-callback": () => {
+          console.log("reCAPTCHA expired")
+          setError("reCAPTCHA expired. Please try again.")
+        },
+      })
 
       setRecaptchaVerifier(verifier)
       return verifier
     } catch (err: any) {
+      console.error("Setup reCAPTCHA error:", err)
       setError(err.message)
       return null
     }
@@ -53,7 +96,20 @@ export const usePhoneAuth = () => {
         throw new Error("Firebase is not configured. Please add Firebase credentials to .env.local")
       }
 
-      // Setup reCAPTCHA if not already done
+      console.log("Starting OTP send process for:", phoneNumber)
+
+      // Wait a bit for DOM to be ready
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      // Check if element exists
+      const element = document.getElementById("recaptcha-container")
+      if (!element) {
+        throw new Error("reCAPTCHA container not found in DOM")
+      }
+
+      console.log("Setting up reCAPTCHA...")
+      
+      // Reuse existing verifier if available, otherwise create new one
       let verifier = recaptchaVerifier
       if (!verifier) {
         verifier = setupRecaptcha("recaptcha-container")
@@ -62,15 +118,48 @@ export const usePhoneAuth = () => {
         }
       }
 
+      console.log("reCAPTCHA setup complete, sending OTP...")
+
       const result = await signInWithPhoneNumber(auth, phoneNumber, verifier)
       setConfirmationResult(result)
       setLoading(false)
+      
+      console.log("OTP sent successfully")
       return { success: true }
     } catch (err: any) {
       console.error("Error sending OTP:", err)
-      setError(err.message || "Failed to send OTP")
+      
+      // Clear the verifier on error so it can be recreated
+      if (recaptchaVerifier) {
+        try {
+          recaptchaVerifier.clear()
+          setRecaptchaVerifier(null)
+          // Clear the container
+          const element = document.getElementById("recaptcha-container")
+          if (element) {
+            element.innerHTML = ''
+          }
+        } catch (e) {
+          console.log("Error clearing reCAPTCHA:", e)
+        }
+      }
+      
+      let errorMessage = err.message || "Failed to send OTP"
+      
+      // Provide helpful error messages
+      if (err.code === "auth/invalid-phone-number") {
+        errorMessage = "Invalid phone number format"
+      } else if (err.code === "auth/missing-phone-number") {
+        errorMessage = "Phone number is required"
+      } else if (err.code === "auth/quota-exceeded") {
+        errorMessage = "SMS quota exceeded. Please try again later"
+      } else if (err.code === "auth/captcha-check-failed") {
+        errorMessage = "reCAPTCHA verification failed. Please try again"
+      }
+      
+      setError(errorMessage)
       setLoading(false)
-      return { success: false, error: err.message }
+      return { success: false, error: errorMessage }
     }
   }
 
@@ -194,5 +283,7 @@ export const usePhoneAuth = () => {
     loginWithPhone,
     registerUser,
     completePhoneAuth,
+    cleanup,
+    reset,
   }
 }
