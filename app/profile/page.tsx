@@ -51,11 +51,13 @@ export default function ProfilePage() {
   }, [router])
 
   const [profileForm, setProfileForm] = React.useState({
-    name: "",
+    firstName: "",
+    lastName: "",
     email: "",
     contact: "",
     gender: "",
     dob: "",
+    age: "",
     street: "",
     city: "",
     state: "",
@@ -97,11 +99,13 @@ export default function ProfilePage() {
       }
       
       setProfileForm({
-        name: data.name || "",
+        firstName: data.firstName || "",
+        lastName: data.lastName || "",
         email: data.email || "",
         contact: displayContact,
         gender: data.gender || "",
         dob: data.dob || "",
+        age: data.age?.toString() || "",
         street: data.address?.street || "",
         city: data.address?.city || "",
         state: data.address?.state || "",
@@ -137,11 +141,13 @@ export default function ProfilePage() {
 
     try {
       const result = await profileApi.update({
-        name: profileForm.name,
+        firstName: profileForm.firstName,
+        lastName: profileForm.lastName,
         email: profileForm.email,
         // contact is not editable, so don't send it
         gender: profileForm.gender,
         dob: profileForm.dob,
+        age: profileForm.age ? parseInt(profileForm.age) : undefined,
         address: {
           street: profileForm.street,
           city: profileForm.city,
@@ -264,21 +270,19 @@ export default function ProfilePage() {
     setUpdating(true)
     try {
       const result = await profileApi.deleteProfileImage()
-      console.log("Image delete result:", result) // Debug log
+      console.log("Image delete result:", result)
+      
       if (result.success) {
         toast({
           title: "Success",
           description: "Profile image deleted successfully",
         })
-        // Update profile state immediately
-        setProfile((prev: any) => ({
-          ...prev,
-          profileImage: null,
-        }))
-        // Update localStorage using helper function
+        
+        // Update localStorage
         updateUserProfile({ profileImage: null })
-        // Trigger a page reload event to update navbar
-        window.dispatchEvent(new Event("storage"))
+        
+        // Reload page to show updated state everywhere
+        window.location.reload()
       } else {
         toast({
           title: "Error",
@@ -418,7 +422,7 @@ export default function ProfilePage() {
             <Card className="lg:col-span-1">
               <CardContent className="p-6">
                 <div className="flex flex-col items-center text-center">
-                  <div className="relative">
+                  <div className="relative group">
                     <Avatar className="h-24 w-24">
                       <AvatarImage 
                         src={
@@ -426,18 +430,22 @@ export default function ProfilePage() {
                           (typeof profile?.profileImage === 'string' ? profile?.profileImage : null) || 
                           "/placeholder-user.jpg"
                         } 
-                        alt={profile?.name || "User"}
+                        alt={`${profile?.firstName || ''} ${profile?.lastName || ''}`}
                         className="object-cover"
                         onError={(e) => {
                           console.log("Image load error:", profile?.profileImage)
                           e.currentTarget.src = "/placeholder-user.jpg"
                         }}
                       />
-                      <AvatarFallback className="text-2xl">{getInitials(profile?.name || "User")}</AvatarFallback>
+                      <AvatarFallback className="text-2xl">
+                        {getInitials(`${profile?.firstName || ''} ${profile?.lastName || 'User'}`)}
+                      </AvatarFallback>
                     </Avatar>
+                    
+                    {/* Upload button */}
                     <label
                       htmlFor="profile-image"
-                      className="absolute bottom-0 right-0 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                      className="absolute bottom-0 right-0 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg"
                       title="Upload profile image"
                     >
                       <Upload className="h-4 w-4" />
@@ -450,23 +458,28 @@ export default function ProfilePage() {
                         disabled={updating}
                       />
                     </label>
+                    
+                    {/* Delete button - only show if image exists */}
+                    {profile?.profileImage && (
+                      <button
+                        onClick={handleDeleteImage}
+                        disabled={updating}
+                        className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg opacity-0 group-hover:opacity-100"
+                        title="Delete profile image"
+                      >
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
-                  <h2 className="mt-4 text-xl font-bold">{profile?.name || "User"}</h2>
+                  <h2 className="mt-4 text-xl font-bold">
+                    {profile?.firstName || profile?.lastName 
+                      ? `${profile?.firstName || ''} ${profile?.lastName || ''}`.trim()
+                      : "User"}
+                  </h2>
                   <p className="text-sm text-muted-foreground">{profile?.email}</p>
                   <Badge className="mt-3">Verified Account</Badge>
-                  
-                  {profile?.profileImage && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3"
-                      onClick={handleDeleteImage}
-                      disabled={updating}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Remove Photo
-                    </Button>
-                  )}
                   
                   {updating && (
                     <p className="mt-2 text-xs text-muted-foreground">Uploading...</p>
@@ -502,16 +515,27 @@ export default function ProfilePage() {
                     <CardContent className="p-6">
                       <h3 className="mb-6 text-lg font-semibold">Personal Information</h3>
                       <form onSubmit={handleUpdateProfile} className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="name">Full Name</Label>
-                          <div className="relative">
-                            <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="firstName">First Name</Label>
+                            <div className="relative">
+                              <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="firstName"
+                                className="pl-9"
+                                placeholder="John"
+                                value={profileForm.firstName}
+                                onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="lastName">Last Name</Label>
                             <Input
-                              id="name"
-                              className="pl-9"
-                              placeholder="John Doe"
-                              value={profileForm.name}
-                              onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                              id="lastName"
+                              placeholder="Doe"
+                              value={profileForm.lastName}
+                              onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
                             />
                           </div>
                         </div>
@@ -550,7 +574,18 @@ export default function ProfilePage() {
                           </p>
                         </div>
 
-                        <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="grid gap-4 sm:grid-cols-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="age">Age</Label>
+                            <Input
+                              id="age"
+                              type="number"
+                              placeholder="25"
+                              value={profileForm.age}
+                              onChange={(e) => setProfileForm({ ...profileForm, age: e.target.value })}
+                            />
+                          </div>
+
                           <div className="space-y-2">
                             <Label htmlFor="dob">Date of Birth</Label>
                             <Input
@@ -570,11 +605,8 @@ export default function ProfilePage() {
                               onChange={(e) => setProfileForm({ ...profileForm, gender: e.target.value })}
                             >
                               <option value="">Select Gender</option>
-                              <option value="male">Male</option>
                               <option value="Male">Male</option>
-                              <option value="female">Female</option>
                               <option value="Female">Female</option>
-                              <option value="other">Other</option>
                               <option value="Other">Other</option>
                             </select>
                           </div>

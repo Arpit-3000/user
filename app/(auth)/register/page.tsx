@@ -73,7 +73,8 @@ export default function RegisterPage() {
   }, [])
 
   const [formData, setFormData] = React.useState({
-    name: "",
+    firstName: "",
+    lastName: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -113,10 +114,10 @@ export default function RegisterPage() {
     try {
       if (registrationMethod === "email") {
         const result = await authApi.register({
-          name: formData.name,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
           email: formData.email,
           password: formData.password,
-          role: "patient",
           age: formData.age ? parseInt(formData.age) : undefined,
           gender: formData.gender || undefined,
           contact: formData.contact || undefined,
@@ -156,11 +157,11 @@ export default function RegisterPage() {
 
         const result = await registerPhoneUser({
           idToken: firebaseIdToken,
-          name: formData.name,
-          role: "patient",
+          firstName: formData.firstName,
+          lastName: formData.lastName,
           email: formData.email || undefined,
           age: formData.age ? parseInt(formData.age) : undefined,
-          gender: formData.gender as "male" | "female" | "other" | undefined,
+          gender: formData.gender as "Male" | "Female" | "Other" | undefined,
           address: formData.street
             ? {
                 street: formData.street,
@@ -356,17 +357,31 @@ export default function RegisterPage() {
                   )}
 
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Full Name *</Label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="firstName">First Name *</Label>
+                        <div className="relative">
+                          <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="firstName"
+                            type="text"
+                            placeholder="John"
+                            className="pl-9"
+                            value={formData.firstName}
+                            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="lastName">Last Name *</Label>
                         <Input
-                          id="name"
+                          id="lastName"
                           type="text"
-                          placeholder="John Doe"
-                          className="pl-9"
-                          value={formData.name}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          placeholder="Doe"
+                          value={formData.lastName}
+                          onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                           required
                         />
                       </div>
@@ -687,17 +702,31 @@ export default function RegisterPage() {
 
                   {/* User Details Section */}
                   <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name-phone">Full Name *</Label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="firstName-phone">First Name *</Label>
+                        <div className="relative">
+                          <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="firstName-phone"
+                            type="text"
+                            placeholder="John"
+                            className="pl-9"
+                            value={formData.firstName}
+                            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="lastName-phone">Last Name *</Label>
                         <Input
-                          id="name-phone"
+                          id="lastName-phone"
                           type="text"
-                          placeholder="John Doe"
-                          className="pl-9"
-                          value={formData.name}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          placeholder="Doe"
+                          value={formData.lastName}
+                          onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                           required
                         />
                       </div>

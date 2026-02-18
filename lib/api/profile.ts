@@ -34,10 +34,10 @@ export const profileApi = {
   },
 
   update: async (data: {
-    name?: string
     firstName?: string
     lastName?: string
     dob?: string
+    age?: number
     email?: string
     contact?: string
     gender?: string
