@@ -56,7 +56,6 @@ export const usePhoneAuth = () => {
       if (recaptchaVerifier) {
         try {
           recaptchaVerifier.clear()
-          setRecaptchaVerifier(null)
         } catch (e) {
           console.log("Error clearing previous reCAPTCHA:", e)
         }
@@ -65,29 +64,51 @@ export const usePhoneAuth = () => {
       // Clear the container's innerHTML to remove any leftover reCAPTCHA elements
       element.innerHTML = ''
 
-      // Firebase v9+ modular syntax
-      const verifier = new RecaptchaVerifier(auth, elementId, {
-        size: "invisible",
-        callback: () => {
-          console.log("reCAPTCHA solved")
-        },
-        "expired-callback": () => {
-          console.log("reCAPTCHA expired")
-          setError("reCAPTCHA expired. Please try again.")
-        },
+      // Check if there's already a reCAPTCHA widget in the element or anywhere on page
+      const existingWidgets = document.querySelectorAll('.grecaptcha-badge')
+      existingWidgets.forEach(widget => {
+        console.log("Removing existing reCAPTCHA widget")
+        widget.remove()
       })
+      
+      // Also check for any iframe elements that might be reCAPTCHA
+      const iframes = element.querySelectorAll('iframe')
+      iframes.forEach(iframe => iframe.remove())
 
-      setRecaptchaVerifier(verifier)
-      return verifier
+      // Wait a tiny bit for DOM cleanup
+      return new Promise<RecaptchaVerifier | null>((resolve) => {
+        setTimeout(() => {
+          try {
+            // Firebase v9+ modular syntax
+            const verifier = new RecaptchaVerifier(auth, elementId, {
+              size: "invisible",
+              callback: () => {
+                console.log("reCAPTCHA solved")
+              },
+              "expired-callback": () => {
+                console.log("reCAPTCHA expired")
+                setError("reCAPTCHA expired. Please try again.")
+              },
+            })
+
+            setRecaptchaVerifier(verifier)
+            resolve(verifier)
+          } catch (err: any) {
+            console.error("Setup reCAPTCHA error:", err)
+            setError(err.message)
+            resolve(null)
+          }
+        }, 100)
+      })
     } catch (err: any) {
       console.error("Setup reCAPTCHA error:", err)
       setError(err.message)
-      return null
+      return Promise.resolve(null)
     }
   }
 
   // Send OTP to phone number
-  const sendOTP = async (phoneNumber: string) => {
+  const sendOTP = async (phoneNumber: string, containerId: string = "recaptcha-container") => {
     setLoading(true)
     setError(null)
 
@@ -102,20 +123,35 @@ export const usePhoneAuth = () => {
       await new Promise(resolve => setTimeout(resolve, 100))
 
       // Check if element exists
-      const element = document.getElementById("recaptcha-container")
+      const element = document.getElementById(containerId)
       if (!element) {
         throw new Error("reCAPTCHA container not found in DOM")
       }
 
       console.log("Setting up reCAPTCHA...")
       
-      // Reuse existing verifier if available, otherwise create new one
-      let verifier = recaptchaVerifier
-      if (!verifier) {
-        verifier = setupRecaptcha("recaptcha-container")
-        if (!verifier) {
-          throw new Error("Failed to setup reCAPTCHA")
+      // Always create a fresh verifier - don't reuse
+      // Clear any existing verifier first
+      if (recaptchaVerifier) {
+        try {
+          recaptchaVerifier.clear()
+          setRecaptchaVerifier(null)
+        } catch (e) {
+          console.log("Error clearing existing verifier:", e)
         }
+      }
+      
+      // Clear the container
+      element.innerHTML = ''
+      
+      // Remove any badges from the page
+      const badges = document.querySelectorAll('.grecaptcha-badge')
+      badges.forEach(badge => badge.remove())
+      
+      // Create fresh verifier (now async)
+      const verifier = await setupRecaptcha(containerId)
+      if (!verifier) {
+        throw new Error("Failed to setup reCAPTCHA")
       }
 
       console.log("reCAPTCHA setup complete, sending OTP...")
@@ -130,19 +166,7 @@ export const usePhoneAuth = () => {
       console.error("Error sending OTP:", err)
       
       // Clear the verifier on error so it can be recreated
-      if (recaptchaVerifier) {
-        try {
-          recaptchaVerifier.clear()
-          setRecaptchaVerifier(null)
-          // Clear the container
-          const element = document.getElementById("recaptcha-container")
-          if (element) {
-            element.innerHTML = ''
-          }
-        } catch (e) {
-          console.log("Error clearing reCAPTCHA:", e)
-        }
-      }
+      cleanup()
       
       let errorMessage = err.message || "Failed to send OTP"
       
@@ -180,9 +204,21 @@ export const usePhoneAuth = () => {
       return { success: true, idToken }
     } catch (err: any) {
       console.error("Error verifying OTP:", err)
-      setError(err.message || "Invalid OTP")
+      
+      // Provide user-friendly error messages
+      let errorMessage = "Invalid OTP"
+      
+      if (err.code === "auth/invalid-verification-code") {
+        errorMessage = "Wrong OTP. Please try again."
+      } else if (err.code === "auth/code-expired") {
+        errorMessage = "OTP expired. Please request a new one."
+      } else if (err.code === "auth/session-expired") {
+        errorMessage = "Session expired. Please request a new OTP."
+      }
+      
+      setError(errorMessage)
       setLoading(false)
-      return { success: false, error: err.message }
+      return { success: false, error: errorMessage }
     }
   }
 

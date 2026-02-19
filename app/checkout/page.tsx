@@ -170,10 +170,20 @@ export default function CheckoutPage() {
   };
 
   const handlePlaceOrder = async () => {
+    // Check if user has any address option available
+    if (addresses.length === 0 && !useCustomAddress) {
+      toast({
+        title: 'No Address Found',
+        description: 'Please add a delivery address in your profile or use custom address option',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!useCustomAddress && !selectedAddressId) {
       toast({
         title: 'Address Required',
-        description: 'Please select a delivery address',
+        description: 'Please select a delivery address or add a new one',
         variant: 'destructive',
       });
       return;
@@ -181,8 +191,8 @@ export default function CheckoutPage() {
 
     if (useCustomAddress && (!customAddress.houseNumber || !customAddress.street || !customAddress.city || !customAddress.state || !customAddress.pincode)) {
       toast({
-        title: 'Address Required',
-        description: 'Please fill all address fields',
+        title: 'Incomplete Address',
+        description: 'Please fill all address fields (House Number, Street, City, State, Pincode)',
         variant: 'destructive',
       });
       return;
@@ -212,12 +222,32 @@ export default function CheckoutPage() {
       let addressString = '';
 
       if (useCustomAddress) {
+        // Validate custom address is not empty
+        if (!customAddress.houseNumber.trim() || !customAddress.street.trim() || !customAddress.city.trim() || !customAddress.state.trim() || !customAddress.pincode.trim()) {
+          toast({
+            title: 'Invalid Address',
+            description: 'Address fields cannot be empty',
+            variant: 'destructive',
+          });
+          setPlacing(false);
+          return;
+        }
         // Combine all address fields into single string
         addressString = `${customAddress.houseNumber}, ${customAddress.street}, ${customAddress.city}, ${customAddress.state} - ${customAddress.pincode}`;
       } else if (selectedAddressId) {
         // Find the selected address and format it as a string
         const selectedAddr = addresses.find(addr => addr._id === selectedAddressId);
         if (selectedAddr) {
+          // Validate selected address has required fields
+          if (!selectedAddr.street || !selectedAddr.city || !selectedAddr.state || !selectedAddr.pincode) {
+            toast({
+              title: 'Incomplete Address',
+              description: 'Selected address is incomplete. Please update it in your profile or use custom address',
+              variant: 'destructive',
+            });
+            setPlacing(false);
+            return;
+          }
           addressString = `${selectedAddr.street}, ${selectedAddr.city}, ${selectedAddr.state} ${selectedAddr.pincode}`;
         } else {
           toast({
@@ -232,6 +262,18 @@ export default function CheckoutPage() {
         toast({
           title: 'Address Required',
           description: 'Please select or enter a delivery address',
+          variant: 'destructive',
+        });
+        setPlacing(false);
+        return;
+      }
+
+      // Final validation: Check if address string is meaningful (not just commas and spaces)
+      const cleanAddress = addressString.replace(/[,\s-]/g, '');
+      if (cleanAddress.length < 5) {
+        toast({
+          title: 'Invalid Address',
+          description: 'Please provide a complete delivery address with all required details',
           variant: 'destructive',
         });
         setPlacing(false);

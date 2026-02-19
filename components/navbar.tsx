@@ -42,6 +42,10 @@ export function Navbar() {
     const authStatus = isAuthenticated()
     setAuthenticated(authStatus)
     const userData = getUser()
+    // Combine firstName and lastName if they exist
+    if (userData && (userData.firstName || userData.lastName)) {
+      userData.name = `${userData.firstName || ''} ${userData.lastName || ''}`.trim()
+    }
     setUser(userData)
     
     if (authStatus) {
@@ -53,6 +57,10 @@ export function Navbar() {
   React.useEffect(() => {
     const handleStorageChange = () => {
       const userData = getUser()
+      // Combine firstName and lastName if they exist
+      if (userData && (userData.firstName || userData.lastName)) {
+        userData.name = `${userData.firstName || ''} ${userData.lastName || ''}`.trim()
+      }
       setUser(userData)
     }
 

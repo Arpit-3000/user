@@ -22,7 +22,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState("")
   const [acceptTerms, setAcceptTerms] = React.useState(false)
-  const [registrationMethod, setRegistrationMethod] = React.useState<"email" | "phone">("email")
+  const [recaptchaContainerId, setRecaptchaContainerId] = React.useState("recaptcha-container")
 
   // Phone auth states
   const [otpSent, setOtpSent] = React.useState(false)
@@ -55,7 +55,6 @@ export default function RegisterPage() {
       const savedIdToken = sessionStorage.getItem("signupIdToken")
       
       if (savedPhone && savedIdToken) {
-        setRegistrationMethod("phone")
         setPhoneNumber(savedPhone)
         setFirebaseIdToken(savedIdToken)
         setOtpSent(true)
@@ -92,18 +91,6 @@ export default function RegisterPage() {
     e.preventDefault()
     setError("")
 
-    if (registrationMethod === "email") {
-      if (formData.password !== formData.confirmPassword) {
-        setError("Passwords do not match")
-        return
-      }
-
-      if (formData.password.length < 6) {
-        setError("Password must be at least 6 characters")
-        return
-      }
-    }
-
     if (!acceptTerms) {
       setError("Please accept the terms and conditions")
       return
@@ -112,76 +99,45 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      if (registrationMethod === "email") {
-        const result = await authApi.register({
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          email: formData.email,
-          password: formData.password,
-          age: formData.age ? parseInt(formData.age) : undefined,
-          gender: formData.gender || undefined,
-          contact: formData.contact || undefined,
-          address: formData.street
-            ? {
-                street: formData.street,
-                city: formData.city,
-                state: formData.state,
-                postalCode: formData.postalCode,
-                country: formData.country,
-              }
-            : undefined,
-        })
+      // Phone registration - verify OTP first if not done
+      if (!otpSent) {
+        setError("Please verify your phone number first")
+        setLoading(false)
+        return
+      }
 
-        if (result.success && result.token) {
-          toast({
-            title: "Registration successful",
-            description: "Welcome to ArogyaRx!",
-          })
-          router.push("/")
-        } else {
-          setError(result.message || "Registration failed")
-        }
+      if (!firebaseIdToken) {
+        setError("Please verify OTP first")
+        setLoading(false)
+        return
+      }
+
+      const result = await registerPhoneUser({
+        idToken: firebaseIdToken,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email || undefined,
+        age: formData.age ? parseInt(formData.age) : undefined,
+        gender: formData.gender as "Male" | "Female" | "Other" | undefined,
+        address: formData.street
+          ? {
+              street: formData.street,
+              city: formData.city,
+              state: formData.state,
+              postalCode: formData.postalCode,
+              country: formData.country,
+            }
+          : undefined,
+      })
+
+      if (result.success) {
+        toast({
+          title: "Registration successful",
+          description: "Welcome to ArogyaRx!",
+        })
+        router.push("/")
       } else {
-        // Phone registration - verify OTP first if not done
-        if (!otpSent) {
-          setError("Please verify your phone number first")
-          setLoading(false)
-          return
-        }
-
-        if (!firebaseIdToken) {
-          setError("Please verify OTP first")
-          setLoading(false)
-          return
-        }
-
-        const result = await registerPhoneUser({
-          idToken: firebaseIdToken,
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          email: formData.email || undefined,
-          age: formData.age ? parseInt(formData.age) : undefined,
-          gender: formData.gender as "Male" | "Female" | "Other" | undefined,
-          address: formData.street
-            ? {
-                street: formData.street,
-                city: formData.city,
-                state: formData.state,
-                postalCode: formData.postalCode,
-                country: formData.country,
-              }
-            : undefined,
-        })
-
-        if (result.success) {
-          toast({
-            title: "Registration successful",
-            description: "Welcome to ArogyaRx!",
-          })
-          router.push("/")
-        } else {
-          setError(result.error || "Registration failed")
-        }
+        setError(result.error || "Registration failed")
       }
     } catch (err: any) {
       setError(err.message || "Registration failed. Please try again.")
@@ -198,8 +154,16 @@ export default function RegisterPage() {
 
     setError("")
     setLoading(true)
+    
+    // Generate unique container ID
+    const newContainerId = `recaptcha-container-${Date.now()}`
+    setRecaptchaContainerId(newContainerId)
+    
+    // Wait for DOM to update with new container
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
     const fullPhoneNumber = `+91${phoneNumber}`
-    const result = await sendOTP(fullPhoneNumber)
+    const result = await sendOTP(fullPhoneNumber, newContainerId)
     setLoading(false)
 
     if (result.success) {
@@ -241,12 +205,16 @@ export default function RegisterPage() {
     // Clear existing reCAPTCHA before resending
     reset()
     
-    // Wait a bit for cleanup
+    // Generate unique container ID
+    const newContainerId = `recaptcha-container-${Date.now()}`
+    setRecaptchaContainerId(newContainerId)
+    
+    // Wait for DOM to update with new container
     await new Promise(resolve => setTimeout(resolve, 200))
     
     setLoading(true)
     const fullPhoneNumber = `+91${phoneNumber}`
-    const result = await sendOTP(fullPhoneNumber)
+    const result = await sendOTP(fullPhoneNumber, newContainerId)
     setLoading(false)
 
     if (result.success) {
@@ -329,278 +297,23 @@ export default function RegisterPage() {
         </div>
 
         <Card className="shadow-2xl border">
-          <CardHeader>
-            <CardTitle className="text-2xl">Sign Up</CardTitle>
-            <CardDescription>Enter your details to create an account</CardDescription>
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">Sign Up</CardTitle>
+            <CardDescription>Register with your phone number</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs 
-              defaultValue={registrationMethod} 
-              value={registrationMethod}
-              className="w-full" 
-              onValueChange={(value) => {
-                setRegistrationMethod(value as "email" | "phone")
-                setError("")
-              }}
-            >
-              <TabsList className="grid w-full grid-cols-2 mb-6">
-                <TabsTrigger value="email">Email</TabsTrigger>
-                <TabsTrigger value="phone">Phone</TabsTrigger>
-              </TabsList>
+            <form onSubmit={handleRegister} className="space-y-4">
+              {/* Hidden reCAPTCHA container - must be visible in DOM */}
+              <div id={recaptchaContainerId} className="flex justify-center"></div>
 
-              <TabsContent value="email">
-                <form onSubmit={handleRegister} className="space-y-4">
-                  {error && (
-                    <Alert variant="destructive">
-                      <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                  )}
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="firstName">First Name *</Label>
-                        <div className="relative">
-                          <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="firstName"
-                            type="text"
-                            placeholder="John"
-                            className="pl-9"
-                            value={formData.firstName}
-                            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="lastName">Last Name *</Label>
-                        <Input
-                          id="lastName"
-                          type="text"
-                          placeholder="Doe"
-                          value={formData.lastName}
-                          onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email *</Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="email"
-                          type="email"
-                          placeholder="you@example.com"
-                          className="pl-9"
-                          value={formData.email}
-                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="contact">Phone Number *</Label>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="contact"
-                          type="tel"
-                          placeholder="9876543210"
-                          className="pl-9"
-                          value={formData.contact}
-                          onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="age">Age *</Label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="age"
-                          type="number"
-                          placeholder="30"
-                          className="pl-9"
-                          value={formData.age}
-                          onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="gender">Gender</Label>
-                    <select
-                      id="gender"
-                      className="w-full rounded-md border px-3 py-2"
-                      value={formData.gender}
-                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                    >
-                      <option value="">Select Gender</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="password">Password *</Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="password"
-                          type="password"
-                          placeholder="••••••••"
-                          className="pl-9"
-                          value={formData.password}
-                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">Confirm Password *</Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="confirmPassword"
-                          type="password"
-                          placeholder="••••••••"
-                          className="pl-9"
-                          value={formData.confirmPassword}
-                          onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-4">
-                    <h3 className="mb-3 text-sm font-medium">Address (Optional)</h3>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="street">Street Address</Label>
-                        <div className="relative">
-                          <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="street"
-                            type="text"
-                            placeholder="123 Main Street"
-                            className="pl-9"
-                            value={formData.street}
-                            onChange={(e) => setFormData({ ...formData, street: e.target.value })}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="city">City</Label>
-                          <Input
-                            id="city"
-                            type="text"
-                            placeholder="Mumbai"
-                            value={formData.city}
-                            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="state">State</Label>
-                          <Input
-                            id="state"
-                            type="text"
-                            placeholder="Maharashtra"
-                            value={formData.state}
-                            onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="postalCode">Postal Code</Label>
-                          <Input
-                            id="postalCode"
-                            type="text"
-                            placeholder="400001"
-                            value={formData.postalCode}
-                            onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="country">Country</Label>
-                          <Input
-                            id="country"
-                            type="text"
-                            placeholder="India"
-                            value={formData.country}
-                            onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2">
-                    <Checkbox
-                      id="terms"
-                      checked={acceptTerms}
-                      onCheckedChange={(checked) => setAcceptTerms(checked as boolean)}
-                    />
-                    <Label htmlFor="terms" className="text-sm font-normal leading-relaxed">
-                      I agree to the{" "}
-                      <Link href="/terms" className="text-primary hover:underline">
-                        Terms of Service
-                      </Link>{" "}
-                      and{" "}
-                      <Link href="/privacy" className="text-primary hover:underline">
-                        Privacy Policy
-                      </Link>
-                    </Label>
-                  </div>
-
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? (
-                      <span className="flex items-center gap-2">
-                        <span className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></span>
-                        Creating account...
-                      </span>
-                    ) : (
-                      "Create Account"
-                    )}
-                  </Button>
-                </form>
-              </TabsContent>
-
-              <TabsContent value="phone">
-                <form onSubmit={handleRegister} className="space-y-4">
-                  {/* Hidden reCAPTCHA container - must be visible in DOM */}
-                  <div id="recaptcha-container" className="flex justify-center"></div>
-
-                  {error && (
-                    <Alert variant="destructive">
-                      <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                  )}
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
 
                   {/* Phone Verification Section */}
                   <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-                    <h3 className="text-sm font-medium">Phone Verification</h3>
-                    
                     {firebaseIdToken ? (
                       // Already verified from login
                       <div className="space-y-2">
@@ -758,7 +471,15 @@ export default function RegisterPage() {
                             placeholder="30"
                             className="pl-9"
                             value={formData.age}
-                            onChange={(e) => setFormData({ ...formData, age: e.target.value })}
+                            min="0"
+                            max="100"
+                            onChange={(e) => {
+                              const value = e.target.value
+                              // Only allow numbers between 0-100
+                              if (value === '' || (parseInt(value) >= 0 && parseInt(value) <= 100)) {
+                                setFormData({ ...formData, age: value })
+                              }
+                            }}
                           />
                         </div>
                       </div>
@@ -813,17 +534,7 @@ export default function RegisterPage() {
                     )}
                   </Button>
                 </form>
-              </TabsContent>
-            </Tabs>
           </CardContent>
-          <CardFooter className="flex-col gap-2">
-            <div className="text-sm text-muted-foreground text-center">
-              Already have an account?{" "}
-              <Link href="/login" className="text-primary hover:underline font-medium">
-                Sign in
-              </Link>
-            </div>
-          </CardFooter>
         </Card>
       </div>
     </div>

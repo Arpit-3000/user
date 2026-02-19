@@ -19,6 +19,9 @@ export default function LoginPage() {
   const { toast } = useToast()
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState("")
+  const [recaptchaContainerId, setRecaptchaContainerId] = React.useState("recaptcha-container")
+  const [otpExpiryTime, setOtpExpiryTime] = React.useState<number | null>(null)
+  const [timeRemaining, setTimeRemaining] = React.useState<number>(0)
 
   const [emailLogin, setEmailLogin] = React.useState({ email: "", password: "" })
   const [phoneLogin, setPhoneLogin] = React.useState({ phone: "" })
@@ -41,12 +44,31 @@ export default function LoginPage() {
     }
   }, [phoneError])
 
-  // Cleanup on unmount
+  // Cleanup on unmount only
   React.useEffect(() => {
     return () => {
       cleanup()
     }
-  }, [cleanup])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // OTP Timer countdown
+  React.useEffect(() => {
+    if (!otpExpiryTime) return
+
+    const interval = setInterval(() => {
+      const now = Date.now()
+      const remaining = Math.max(0, Math.floor((otpExpiryTime - now) / 1000))
+      setTimeRemaining(remaining)
+
+      if (remaining === 0) {
+        clearInterval(interval)
+        setError("OTP expired. Please request a new one.")
+      }
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [otpExpiryTime])
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -82,12 +104,22 @@ export default function LoginPage() {
     if (!otpSent) {
       // Send OTP
       setLoading(true)
+      
+      // Generate unique container ID
+      const newContainerId = `recaptcha-container-${Date.now()}`
+      setRecaptchaContainerId(newContainerId)
+      
+      // Wait for DOM to update with new container
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
       const phoneNumber = `+91${phoneLogin.phone}`
-      const result = await sendOTP(phoneNumber)
+      const result = await sendOTP(phoneNumber, newContainerId)
       setLoading(false)
 
       if (result.success) {
         setOtpSent(true)
+        // Set OTP expiry time (5 minutes from now)
+        setOtpExpiryTime(Date.now() + 5 * 60 * 1000)
         toast({
           title: "OTP Sent",
           description: "Please check your phone for the verification code.",
@@ -128,7 +160,15 @@ export default function LoginPage() {
           setError(loginResult.error || "Login failed")
         }
       } else {
-        setError(verifyResult.error || "Invalid OTP")
+        // Show user-friendly error message for wrong OTP
+        const errorMsg = verifyResult.error || "Invalid OTP"
+        if (errorMsg.includes("invalid-verification-code") || errorMsg.includes("auth/invalid-verification-code")) {
+          setError("Wrong OTP. Please try again.")
+        } else if (errorMsg.includes("code-expired")) {
+          setError("OTP expired. Please request a new one.")
+        } else {
+          setError("Invalid OTP. Please check and try again.")
+        }
       }
       setLoading(false)
     }
@@ -136,19 +176,26 @@ export default function LoginPage() {
 
   const handleResendOTP = async () => {
     setError("")
+    setOtp("") // Clear OTP input
     
     // Clear existing reCAPTCHA before resending
-    reset()
+    cleanup()
     
-    // Wait a bit for cleanup
+    // Generate unique container ID
+    const newContainerId = `recaptcha-container-${Date.now()}`
+    setRecaptchaContainerId(newContainerId)
+    
+    // Wait for DOM to update with new container
     await new Promise(resolve => setTimeout(resolve, 200))
     
     setLoading(true)
     const phoneNumber = `+91${phoneLogin.phone}`
-    const result = await sendOTP(phoneNumber)
+    const result = await sendOTP(phoneNumber, newContainerId)
     setLoading(false)
 
     if (result.success) {
+      // Reset OTP expiry time (5 minutes from now)
+      setOtpExpiryTime(Date.now() + 5 * 60 * 1000)
       toast({
         title: "OTP Resent",
         description: "A new verification code has been sent to your phone.",
@@ -227,146 +274,72 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <Card className="shadow-2xl border">
-          <CardHeader>
-            <CardTitle className="text-2xl">Sign In</CardTitle>
-            <CardDescription>Choose your preferred login method</CardDescription>
+        <Card className="shadow-2xl border-0 bg-card/95 backdrop-blur">
+          <CardHeader className="text-center space-y-1 pb-4">
+            <CardTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+              Sign In
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Enter your phone number to continue
+            </p>
           </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="email" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="email">Email</TabsTrigger>
-                <TabsTrigger value="phone">Phone</TabsTrigger>
-              </TabsList>
+          <CardContent className="px-6 pb-6">
+            {/* Only Phone Login - No Tabs */}
+            <form onSubmit={handlePhoneLogin} className="space-y-4">
+              {error && (
+                <div className="text-center py-1.5 text-sm text-red-600 dark:text-red-400">
+                  {error}
+                </div>
+              )}
 
-              <TabsContent value="email">
-                <form onSubmit={handleEmailLogin} className="space-y-4">
-                  {error && (
-                    <div className="text-center py-2 text-sm text-red-600 dark:text-red-400">
-                      {error}
-                    </div>
-                  )}
+              {/* Hidden reCAPTCHA container - must be visible in DOM */}
+              <div id={recaptchaContainerId} className="flex justify-center"></div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="you@example.com"
-                        className="pl-9"
-                        value={emailLogin.email}
-                        onChange={(e) => setEmailLogin({ ...emailLogin, email: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="password">Password</Label>
-                      <Link href="/forgot-password" className="text-xs text-primary hover:underline">
-                        Forgot password?
-                      </Link>
-                    </div>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="password"
-                        type="password"
-                        placeholder="••••••••"
-                        className="pl-9"
-                        value={emailLogin.password}
-                        onChange={(e) => setEmailLogin({ ...emailLogin, password: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? (
-                      <span className="flex items-center gap-2">
-                        <span className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></span>
-                        Signing in...
-                      </span>
-                    ) : (
-                      "Sign In"
-                    )}
-                  </Button>
-                </form>
-              </TabsContent>
-
-              <TabsContent value="phone">
-                <form onSubmit={handlePhoneLogin} className="space-y-4">
-                  {error && (
-                    <div className="text-center py-2 text-sm text-red-600 dark:text-red-400">
-                      {error}
-                    </div>
-                  )}
-
-                  {/* Hidden reCAPTCHA container - must be visible in DOM */}
-                  <div id="recaptcha-container" className="flex justify-center"></div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <div className="relative">
+              {!otpSent ? (
+                // Phone Number Input - Show only when OTP not sent
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-sm font-medium">Phone Number</Label>
+                  <div className="flex gap-2">
+                    {/* Country Code Block */}
+                    <div className="relative w-20">
                       <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <div className="absolute left-9 top-2.5 text-sm text-muted-foreground">+91</div>
                       <Input
-                        id="phone"
-                        type="tel"
-                        placeholder="98765 43210"
-                        className="pl-[4.5rem]"
-                        value={phoneLogin.phone}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, "")
-                          setPhoneLogin({ ...phoneLogin, phone: value })
-                        }}
-                        disabled={otpSent}
-                        required
-                        maxLength={10}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Enter your 10-digit mobile number
-                    </p>
-                  </div>
-
-                  {otpSent && (
-                    <div className="space-y-2">
-                      <Label htmlFor="otp">Enter OTP</Label>
-                      <Input
-                        id="otp"
                         type="text"
-                        placeholder="123456"
-                        maxLength={6}
-                        value={otp}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, "")
-                          setOtp(value)
-                        }}
-                        required
+                        value="+91"
+                        disabled
+                        className="h-10 text-sm font-medium border-2 pl-9 bg-muted cursor-not-allowed"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        OTP sent to +91{phoneLogin.phone}.{" "}
-                        <button 
-                          type="button" 
-                          className="text-primary hover:underline"
-                          onClick={handleResendOTP}
-                          disabled={loading || phoneLoading}
-                        >
-                          Resend OTP
-                        </button>
-                      </p>
                     </div>
-                  )}
-
-                  {otpSent && (
-                    <Button
+                    {/* Phone Number Block */}
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="98765 43210"
+                      className="flex-1 h-10 text-sm border-2 focus:border-primary transition-colors"
+                      value={phoneLogin.phone}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, "")
+                        setPhoneLogin({ ...phoneLogin, phone: value })
+                      }}
+                      required
+                      maxLength={10}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Enter your 10-digit mobile number
+                  </p>
+                </div>
+              ) : (
+                // OTP Input - Show only when OTP sent
+                <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+                  {/* Change Phone Number Link */}
+                  <div className="text-center">
+                    <button
                       type="button"
-                      variant="outline"
-                      className="w-full"
+                      className="text-xs text-primary hover:underline font-medium"
                       onClick={() => {
                         reset() // Clear reCAPTCHA and reset state
                         setOtpSent(false)
@@ -376,33 +349,97 @@ export default function LoginPage() {
                       }}
                     >
                       Change Phone Number
-                    </Button>
-                  )}
+                    </button>
+                  </div>
 
-                  <Button type="submit" className="w-full" disabled={loading || phoneLoading}>
-                    {loading || phoneLoading ? (
-                      <span className="flex items-center gap-2">
-                        <span className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></span>
-                        {otpSent ? "Verifying..." : "Sending OTP..."}
-                      </span>
-                    ) : otpSent ? (
-                      "Verify OTP & Login"
-                    ) : (
-                      "Send OTP"
-                    )}
-                  </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
+                  {/* OTP Input Field */}
+                  <div className="space-y-2">
+                    <Label htmlFor="otp-0" className="text-sm font-medium">Enter OTP</Label>
+                    <div className="flex gap-2 justify-center">
+                      {[0, 1, 2, 3, 4, 5].map((index) => (
+                        <Input
+                          key={index}
+                          id={`otp-${index}`}
+                          className="h-11 w-11 text-center text-lg font-semibold border-2 focus:border-primary transition-colors p-0"
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={1}
+                          value={otp[index] || ""}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, "")
+                            if (value.length <= 1) {
+                              const newOtp = otp.split("")
+                              newOtp[index] = value
+                              setOtp(newOtp.join(""))
+                              
+                              // Auto-focus next input
+                              if (value && index < 5) {
+                                const nextInput = document.getElementById(`otp-${index + 1}`)
+                                nextInput?.focus()
+                              }
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            // Handle backspace to go to previous input
+                            if (e.key === "Backspace" && !otp[index] && index > 0) {
+                              const prevInput = document.getElementById(`otp-${index - 1}`)
+                              prevInput?.focus()
+                            }
+                          }}
+                          onPaste={(e) => {
+                            e.preventDefault()
+                            const pastedData = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)
+                            setOtp(pastedData)
+                            
+                            // Focus the last filled input or the next empty one
+                            const nextIndex = Math.min(pastedData.length, 5)
+                            const nextInput = document.getElementById(`otp-${nextIndex}`)
+                            nextInput?.focus()
+                          }}
+                          autoFocus={index === 0}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground text-center">
+                      OTP sent to +91{phoneLogin.phone}.{" "}
+                      {timeRemaining > 0 ? (
+                        <span className="text-primary font-medium">
+                          Expires in {Math.floor(timeRemaining / 60)}:{String(timeRemaining % 60).padStart(2, '0')}
+                        </span>
+                      ) : (
+                        <button 
+                          type="button" 
+                          className="text-primary hover:underline font-medium"
+                          onClick={handleResendOTP}
+                          disabled={loading || phoneLoading}
+                        >
+                          Resend OTP
+                        </button>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <Button 
+                type="submit" 
+                className="w-full h-10 text-sm font-semibold shadow-lg hover:shadow-xl transition-all bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70" 
+                disabled={loading || phoneLoading}
+              >
+                {loading || phoneLoading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></span>
+                    {otpSent ? "Verifying..." : "Sending OTP..."}
+                  </span>
+                ) : otpSent ? (
+                  "Verify OTP & Login"
+                ) : (
+                  "Send OTP"
+                )}
+              </Button>
+            </form>
           </CardContent>
-          <CardFooter className="flex-col gap-2">
-            <div className="text-sm text-muted-foreground text-center">
-              Don't have an account?{" "}
-              <Link href="/register" className="text-primary hover:underline font-medium">
-                Sign up
-              </Link>
-            </div>
-          </CardFooter>
         </Card>
       </div>
     </div>

@@ -98,13 +98,30 @@ export default function ProfilePage() {
         displayContact = displayContact.substring(3)
       }
       
+      // Normalize gender to capitalize first letter
+      let normalizedGender = data.gender || ""
+      if (normalizedGender) {
+        normalizedGender = normalizedGender.charAt(0).toUpperCase() + normalizedGender.slice(1).toLowerCase()
+      }
+      
+      // Format DOB for date input (YYYY-MM-DD)
+      let formattedDob = ""
+      if (data.dob) {
+        try {
+          const date = new Date(data.dob)
+          formattedDob = date.toISOString().split('T')[0]
+        } catch (e) {
+          console.error("Error formatting DOB:", e)
+        }
+      }
+      
       setProfileForm({
         firstName: data.firstName || "",
         lastName: data.lastName || "",
         email: data.email || "",
         contact: displayContact,
-        gender: data.gender || "",
-        dob: data.dob || "",
+        gender: normalizedGender,
+        dob: formattedDob,
         age: data.age?.toString() || "",
         street: data.address?.street || "",
         city: data.address?.city || "",
