@@ -474,8 +474,36 @@ export default function OrderDetailPage() {
                   {order.paymentStatus}
                 </Badge>
               </div>
+              {order.razorpayPaymentId && (
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Transaction ID</span>
+                  <span className="text-xs font-mono">{order.razorpayPaymentId}</span>
+                </div>
+              )}
             </CardContent>
           </Card>
+
+          {/* Delivery Partner */}
+          {order.deliveryPartner && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Truck className="h-5 w-5" />
+                  Delivery Partner
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">{order.deliveryPartner.name}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">{order.deliveryPartner.phone}</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Delivery Address */}
           <Card>

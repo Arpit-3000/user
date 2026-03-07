@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Package, Calendar, CreditCard, Truck, FileText, RefreshCw, Filter, Download } from 'lucide-react';
-import { getOrders, getOrderStatistics, getOrdersWithFilters, type Order, type OrderStatistics } from '@/lib/api/orders';
+import { getOrders, getOrderStatistics, getOrdersWithFilters, reorderOrder, type Order, type OrderStatistics } from '@/lib/api/orders';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,7 @@ export default function OrdersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [activeTab, setActiveTab] = useState('all');
+  const [reorderingOrderId, setReorderingOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -108,6 +109,26 @@ export default function OrdersPage() {
   const filterOrdersByStatus = (status: string) => {
     // Filtering is now done server-side, so just return all orders
     return orders;
+  };
+
+  const handleReorder = async (orderId: string) => {
+    setReorderingOrderId(orderId);
+    try {
+      const result = await reorderOrder(orderId);
+      toast({
+        title: 'Success',
+        description: 'Items added to cart successfully',
+      });
+      router.push('/cart');
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setReorderingOrderId(null);
+    }
   };
 
   if (loading) {
@@ -244,6 +265,18 @@ export default function OrdersPage() {
                           <FileText className="h-4 w-4 mr-2" />
                           View Details
                         </Button>
+                        
+                        {order.deliveryStatus === 'Delivered' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleReorder(order._id)}
+                            disabled={reorderingOrderId === order._id}
+                          >
+                            <RefreshCw className={`h-4 w-4 mr-2 ${reorderingOrderId === order._id ? 'animate-spin' : ''}`} />
+                            {reorderingOrderId === order._id ? 'Adding...' : 'Reorder'}
+                          </Button>
+                        )}
                       </div>
                     </div>
 

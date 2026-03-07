@@ -2,19 +2,18 @@ import { API_BASE_URL, getAuthHeaders, handleApiError } from "../api-config"
 
 export interface Medicine {
   _id: string
+  productType: "medicine"
   itemID?: string
-  itemCode?: string
+  itemCode: string
   productName: string
   genericName: string
   brandName: string
   manufacturer: string
+  companyId?: string
   category: string
   prescriptionRequired: boolean
   composition: {
-    activeIngredients: Array<{
-      name: string
-      strength: string
-    }> | string[]
+    activeIngredients: string[]
     inactiveIngredients?: string[]
   }
   dosage: {
@@ -24,31 +23,92 @@ export interface Medicine {
     frequency?: string
     recommendedDosage?: string
   }
+  units?: {
+    primary: {
+      name: string
+      conversion: number
+    }
+    secondary?: {
+      name: string
+      conversion: number
+    }
+    tertiary?: {
+      name: string
+      conversion: number
+    }
+  }
   pricing: {
     mrp: number
-    rate?: number
+    purchaseRate?: number
+    costPrice?: number
     sellingPrice: number
+    ptr?: number
+    rates?: {
+      A?: number
+      B?: number
+      C?: number
+      D?: number
+    }
     discount: number
+    maxDiscount?: number
     addLess?: number
     gst?: number
   }
   stock: {
-    available?: boolean
-    quantity: number
+    available: boolean
+    totalQuantity: number
+    totalSold?: number
     unit?: string
-    minOrderQuantity?: number
-    maxOrderQuantity?: number
+    minOrderQuantity: number
+    maxOrderQuantity: number
+    reorderLevel?: number
+    maximumLevel?: number
+    economicOrderQty?: number
+    nearExpiryDays?: number
+    negativeStockAllowed?: boolean
     lowStockThreshold?: number
     inStock?: boolean
   }
-  tax?: {
+  batches?: Array<{
+    batchNumber: string
+    manufacturingDate: Date
+    expiryDate: Date
+    purchaseDate?: Date
+    mrp: number
+    purchaseRate: number
+    saleRates?: {
+      A?: number
+      B?: number
+      C?: number
+      D?: number
+    }
+    openingStock: number
+    received?: number
+    sold?: number
+    returned?: number
+    damaged?: number
+    available: number
+    supplierId?: string
+    isExpired: boolean
+    isActive: boolean
+    status: "NORMAL" | "HOLD" | "DUMP"
+    holdReason?: string
+    holdStartDate?: Date
+    holdEndDate?: Date
+    dumpReason?: string
+    dumpDate?: Date
+  }>
+  tax: {
     hsnCode: string
-    hsnName: string
+    gstRate: number
+    cessRate?: number
+    isTaxInclusive: boolean
+    hsnName?: string
     localTax?: number
-    sgst: number
-    cgst: number
+    sgst?: number
+    cgst?: number
     centralTax?: number
-    igst: number
+    igst?: number
     oldTax?: number
     taxDiff?: number
   }
@@ -58,14 +118,15 @@ export interface Medicine {
     expiryDate: string
     storageInstructions?: string
   }
-  regulatory?: {
-    drugType?: string
+  regulatory: {
+    drugType: string
+    isNarcotic: boolean
+    scheduleType: "None" | "H" | "H1" | "X" | "G"
     drugLicenseNumber?: string
-    scheduleType?: string
-    sideEffects?: string[]
-    warnings?: string[]
-    contraindications?: string[]
-    interactions?: string[]
+    sideEffects: string[]
+    warnings: string[]
+    contraindications: string[]
+    interactions: string[]
   }
   images: string[]
   description: string
@@ -83,8 +144,8 @@ export interface Medicine {
     sugarFree?: boolean
     glutenFree?: boolean
   }
-  totalSold?: number
-  totalViews?: number
+  totalSold: number
+  totalViews: number
   lastSoldAt?: string
   lastViewedAt?: string
   createdAt: string
@@ -113,14 +174,20 @@ export interface UnifiedSearchResponse {
   success: boolean
   message: string
   query: string
-  data: Medicine[]
-  categorizedResults: {
+  stats: {
     exactNameMatch: number
     partialNameMatch: number
     formulaMatch: number
     genericMatch: number
   }
-  metadata: {
+  categorizedResults: {
+    exactNameMatch: Medicine[]
+    partialNameMatch: Medicine[]
+    formulaMatch: Medicine[]
+    genericMatch: Medicine[]
+  }
+  allResults: Medicine[]
+  pagination: {
     currentPage: number
     totalPages: number
     totalResults: number
@@ -142,6 +209,16 @@ export interface FormulaSearchResponse {
   formula: string
   data: Medicine[]
   metadata: {
+    totalMedicines: number
+    manufacturers: string[]
+    manufacturerCount: number
+    priceRange: {
+      min: number
+      max: number
+      average: string
+    }
+  }
+  pagination: {
     currentPage: number
     totalPages: number
     totalResults: number
@@ -153,15 +230,17 @@ export interface FormulaSearchResponse {
 
 export interface FormulasListResponse {
   success: boolean
-  count: number
+  message: string
   data: Array<{
-    formula: string
-    count: number
+    name: string
+    medicineCount: number
   }>
+  totalFormulas: number
 }
 
 export const medicinesApi = {
   // Get alphabet index with counts
+  // Endpoint: GET /api/medicines/alphabet-index
   getAlphabetIndex: async (): Promise<{ success: boolean; data: AlphabetIndexItem[]; totalLetters: number }> => {
     try {
       const response = await fetch(`${API_BASE_URL}/medicines/alphabet-index`)
@@ -171,8 +250,8 @@ export const medicinesApi = {
     }
   },
 
-  // Unified search - Search by name OR formula in single API
-  // Endpoint: GET /api/medicines/search
+  // Unified search - Search by name, generic, brand, formula in single API
+  // Endpoint: GET /api/medicines/unified-search
   unifiedSearch: async (params: {
     query: string
     page?: number
@@ -194,7 +273,7 @@ export const medicinesApi = {
       if (params.prescriptionRequired !== undefined) queryParams.append('prescriptionRequired', params.prescriptionRequired.toString())
       if (params.inStock !== undefined) queryParams.append('inStock', params.inStock.toString())
 
-      const response = await fetch(`${API_BASE_URL}/medicines/search?${queryParams.toString()}`, {
+      const response = await fetch(`${API_BASE_URL}/medicines/unified-search?${queryParams.toString()}`, {
         headers: getAuthHeaders(),
       })
       return await response.json()
@@ -204,7 +283,7 @@ export const medicinesApi = {
   },
 
   // Search by formula/salt
-  // Endpoint: GET /api/medicines/formula
+  // Endpoint: GET /api/medicines/by-formula
   searchByFormula: async (params: {
     formula: string
     page?: number
@@ -220,7 +299,7 @@ export const medicinesApi = {
       if (params.sortBy) queryParams.append('sortBy', params.sortBy)
       if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder)
 
-      const response = await fetch(`${API_BASE_URL}/medicines/formula?${queryParams.toString()}`, {
+      const response = await fetch(`${API_BASE_URL}/medicines/by-formula?${queryParams.toString()}`, {
         headers: getAuthHeaders(),
       })
       return await response.json()
