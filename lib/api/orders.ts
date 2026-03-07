@@ -71,6 +71,7 @@ export interface Order {
   deliveryStatus: string;
   paymentStatus: string;
   paymentMethod: string;
+  razorpayPaymentId?: string;
   address: string;
   contact: string;
   hasLabTests?: boolean;
@@ -80,7 +81,17 @@ export interface Order {
   prescriptionVerified?: boolean;
   prescriptionVerificationStatus?: string;
   hasPrescriptionRequired?: boolean;
-  medicineSubstitutions?: any[];
+  prescriptionImages?: string[];
+  medicineSubstitutions?: Array<{
+    originalMedicine: string;
+    substituteMedicine: string;
+    reason: string;
+  }>;
+  deliveryPartner?: {
+    _id: string;
+    name: string;
+    phone: string;
+  };
 }
 
 export interface PlaceOrderRequest {
@@ -231,6 +242,7 @@ export interface LabTestOrder {
 
 /**
  * Place order from cart
+ * Endpoint: POST /api/orders/place-order-using-cart
  */
 export async function placeOrder(data: PlaceOrderRequest): Promise<PlaceOrderResponse> {
   const token = getAuthToken();
@@ -239,7 +251,7 @@ export async function placeOrder(data: PlaceOrderRequest): Promise<PlaceOrderRes
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/orders/place-from-cart`, {
+  const response = await fetch(`${API_BASE_URL}/orders/place-order-using-cart`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -258,7 +270,8 @@ export async function placeOrder(data: PlaceOrderRequest): Promise<PlaceOrderRes
 }
 
 /**
- * Get all orders with pagination (simple view)
+ * Get all orders with pagination
+ * Endpoint: GET /api/orders
  */
 export async function getOrders(page = 1, limit = 10): Promise<OrdersResponse> {
   const token = getAuthToken();
@@ -267,7 +280,7 @@ export async function getOrders(page = 1, limit = 10): Promise<OrdersResponse> {
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/orders/?page=${page}&limit=${limit}`, {
+  const response = await fetch(`${API_BASE_URL}/orders?page=${page}&limit=${limit}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
     },
@@ -375,7 +388,8 @@ export async function cancelOrder(orderId: string): Promise<{ message: string; o
 }
 
 /**
- * Check prescription status
+ * Check prescription status for cart
+ * Endpoint: GET /api/orders/prescription-status/:cartId
  */
 export async function checkPrescriptionStatus(cartId: string): Promise<any> {
   const token = getAuthToken();
@@ -384,7 +398,7 @@ export async function checkPrescriptionStatus(cartId: string): Promise<any> {
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/orders/check-prescription/${cartId}`, {
+  const response = await fetch(`${API_BASE_URL}/orders/prescription-status/${cartId}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
     },
@@ -427,6 +441,7 @@ export async function reorderOrder(orderId: string): Promise<any> {
 
 /**
  * Get order statistics
+ * Endpoint: GET /api/orders/statistics
  */
 export async function getOrderStatistics(): Promise<{ success: boolean; message: string; statistics: OrderStatistics }> {
   const token = getAuthToken();
@@ -435,7 +450,7 @@ export async function getOrderStatistics(): Promise<{ success: boolean; message:
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/orders/stats/overview`, {
+  const response = await fetch(`${API_BASE_URL}/orders/statistics`, {
     headers: {
       'Authorization': `Bearer ${token}`,
     },
@@ -484,6 +499,7 @@ export async function downloadInvoice(orderId: string): Promise<void> {
 
 /**
  * Get lab test results
+ * Endpoint: GET /api/orders/my-lab-results
  */
 export async function getLabTestResults(page = 1, limit = 10, status?: string): Promise<any> {
   const token = getAuthToken();
@@ -512,12 +528,102 @@ export async function getLabTestResults(page = 1, limit = 10, status?: string): 
   return result;
 }
 
+/**
+ * Upload prescription for order
+ * Endpoint: POST /api/orders/:orderId/prescription
+ */
+export async function uploadPrescription(orderId: string, files: File[]): Promise<any> {
+  const token = getAuthToken();
+  
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const formData = new FormData();
+  files.forEach(file => {
+    formData.append('files', file);
+  });
+
+  const response = await fetch(`${API_BASE_URL}/orders/${orderId}/prescription`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || 'Failed to upload prescription');
+  }
+
+  return result;
+}
+
+/**
+ * Get prescription images for order
+ * Endpoint: GET /api/orders/:orderId/prescription
+ */
+export async function getPrescriptionImages(orderId: string): Promise<any> {
+  const token = getAuthToken();
+  
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/orders/${orderId}/prescription`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || 'Failed to fetch prescription images');
+  }
+
+  return result;
+}
+
+/**
+ * Delete prescription image
+ * Endpoint: DELETE /api/orders/:orderId/prescription/:imageKey
+ */
+export async function deletePrescriptionImage(orderId: string, imageUrl: string): Promise<any> {
+  const token = getAuthToken();
+  
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  // Extract S3 key from URL
+  const urlObj = new URL(imageUrl);
+  const imageKey = encodeURIComponent(urlObj.pathname.substring(1));
+
+  const response = await fetch(`${API_BASE_URL}/orders/${orderId}/prescription/${imageKey}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || 'Failed to delete prescription image');
+  }
+
+  return result;
+}
+
 // ============================================================================
 // LAB TEST ORDER API FUNCTIONS
 // ============================================================================
 
 /**
- * Create lab test order
+ * Create lab test order (Book directly without cart)
  */
 export async function createLabTestOrder(data: {
   tests: Array<{ labTestId: string }>;
@@ -526,7 +632,14 @@ export async function createLabTestOrder(data: {
   patientGender: string;
   contactPhone: string;
   contactEmail?: string;
-  address: string;
+  address: {
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    pincode: string;
+    landmark?: string;
+  };
   homeCollection?: boolean;
   preferredDate?: string;
   preferredSlot?: { start: string; end: string };
@@ -539,7 +652,8 @@ export async function createLabTestOrder(data: {
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/lab-test-orders`, {
+  // Try the documented endpoint first
+  let response = await fetch(`${API_BASE_URL}/lab-test-orders`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -548,10 +662,22 @@ export async function createLabTestOrder(data: {
     body: JSON.stringify(data),
   });
 
+  // If 404, try alternative endpoint
+  if (response.status === 404) {
+    response = await fetch(`${API_BASE_URL}/orders/lab-test`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+  }
+
   const result = await response.json();
 
   if (!response.ok) {
-    throw new Error(result.message || 'Failed to create lab test order');
+    throw new Error(result.message || result.error || 'Failed to create lab test order');
   }
 
   return result;

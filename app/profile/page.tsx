@@ -22,10 +22,13 @@ import {
   Plus,
   Home,
   Briefcase,
+  User,
 } from "lucide-react"
 import { format } from "date-fns"
 import { profileApi, type Address } from "@/lib/api/profile"
 import { useToast } from "@/hooks/use-toast"
+
+import { ImageCropper } from "@/components/image-cropper"
 
 export default function ProfilePage() {
   const { toast } = useToast()
@@ -35,6 +38,10 @@ export default function ProfilePage() {
   const [profile, setProfile] = React.useState<any>(null)
   const [addresses, setAddresses] = React.useState<Address[]>([])
   const [showAddressForm, setShowAddressForm] = React.useState(false)
+  
+  // Image cropper states
+  const [imageToCrop, setImageToCrop] = React.useState<string | null>(null)
+  const [showCropper, setShowCropper] = React.useState(false)
 
   // Check authentication on mount
   React.useEffect(() => {
@@ -50,6 +57,7 @@ export default function ProfilePage() {
     contact: "",
     gender: "",
     dob: "",
+    age: "",
     street: "",
     city: "",
     state: "",
@@ -80,15 +88,41 @@ export default function ProfilePage() {
   const loadProfile = async () => {
     try {
       const data = await profileApi.get()
-      console.log("Profile data loaded:", data) // Debug log
+      console.log("Profile data loaded:", data)
+      console.log("Profile image data:", data?.profileImage) // Debug profile image
       setProfile(data)
+      
+      // Clean contact number for display (remove +91 if present)
+      let displayContact = data.contact || ""
+      if (displayContact.startsWith("+91")) {
+        displayContact = displayContact.substring(3)
+      }
+      
+      // Normalize gender to capitalize first letter
+      let normalizedGender = data.gender || ""
+      if (normalizedGender) {
+        normalizedGender = normalizedGender.charAt(0).toUpperCase() + normalizedGender.slice(1).toLowerCase()
+      }
+      
+      // Format DOB for date input (YYYY-MM-DD)
+      let formattedDob = ""
+      if (data.dob) {
+        try {
+          const date = new Date(data.dob)
+          formattedDob = date.toISOString().split('T')[0]
+        } catch (e) {
+          console.error("Error formatting DOB:", e)
+        }
+      }
+      
       setProfileForm({
         firstName: data.firstName || "",
         lastName: data.lastName || "",
         email: data.email || "",
-        contact: data.contact || "",
-        gender: data.gender || "",
-        dob: data.dob || "",
+        contact: displayContact,
+        gender: normalizedGender,
+        dob: formattedDob,
+        age: data.age?.toString() || "",
         street: data.address?.street || "",
         city: data.address?.city || "",
         state: data.address?.state || "",
@@ -127,9 +161,10 @@ export default function ProfilePage() {
         firstName: profileForm.firstName,
         lastName: profileForm.lastName,
         email: profileForm.email,
-        contact: profileForm.contact,
+        // contact is not editable, so don't send it
         gender: profileForm.gender,
         dob: profileForm.dob,
+        age: profileForm.age ? parseInt(profileForm.age) : undefined,
         address: {
           street: profileForm.street,
           city: profileForm.city,
@@ -180,25 +215,47 @@ export default function ProfilePage() {
       return
     }
 
+    // Create a preview URL for cropping
+    const reader = new FileReader()
+    reader.onload = () => {
+      setImageToCrop(reader.result as string)
+      setShowCropper(true)
+    }
+    reader.readAsDataURL(file)
+    
+    // Reset the input
+    e.target.value = ""
+  }
+
+  const handleCropComplete = async (croppedImageBlob: Blob) => {
+    setShowCropper(false)
     setUpdating(true)
+    
     try {
-      const result = await profileApi.uploadProfileImage(file)
-      console.log("Image upload result:", result) // Debug log
+      // Convert blob to file
+      const croppedFile = new File([croppedImageBlob], "profile-image.jpg", {
+        type: "image/jpeg",
+      })
+      
+      const result = await profileApi.uploadProfileImage(croppedFile)
+      console.log("Image upload result:", result)
+      
       if (result.success) {
         const newProfileImage = result.profileImage || result.user?.profileImage
+        console.log("New profile image:", newProfileImage)
+        
         toast({
           title: "Success",
           description: "Profile image updated successfully",
         })
-        // Update profile state immediately with new image
-        setProfile((prev: any) => ({
-          ...prev,
-          profileImage: newProfileImage,
-        }))
-        // Update localStorage using helper function
-        updateUserProfile({ profileImage: newProfileImage })
-        // Trigger a page reload event to update navbar
-        window.dispatchEvent(new Event("storage"))
+        
+        // Update localStorage with new image
+        if (newProfileImage) {
+          updateUserProfile({ profileImage: newProfileImage })
+        }
+        
+        // Reload the page to show updated image everywhere
+        window.location.reload()
       } else {
         toast({
           title: "Error",
@@ -215,7 +272,13 @@ export default function ProfilePage() {
       })
     } finally {
       setUpdating(false)
+      setImageToCrop(null)
     }
+  }
+
+  const handleCropCancel = () => {
+    setShowCropper(false)
+    setImageToCrop(null)
   }
 
   const handleDeleteImage = async () => {
@@ -224,21 +287,19 @@ export default function ProfilePage() {
     setUpdating(true)
     try {
       const result = await profileApi.deleteProfileImage()
-      console.log("Image delete result:", result) // Debug log
+      console.log("Image delete result:", result)
+      
       if (result.success) {
         toast({
           title: "Success",
           description: "Profile image deleted successfully",
         })
-        // Update profile state immediately
-        setProfile((prev: any) => ({
-          ...prev,
-          profileImage: null,
-        }))
-        // Update localStorage using helper function
+        
+        // Update localStorage
         updateUserProfile({ profileImage: null })
-        // Trigger a page reload event to update navbar
-        window.dispatchEvent(new Event("storage"))
+        
+        // Reload page to show updated state everywhere
+        window.location.reload()
       } else {
         toast({
           title: "Error",
@@ -359,7 +420,17 @@ export default function ProfilePage() {
 
   return (
     <div className="container px-4 py-8 md:px-6">
-          <div className="mb-8">
+      {/* Image Cropper Dialog */}
+      {imageToCrop && (
+        <ImageCropper
+          image={imageToCrop}
+          onCropComplete={handleCropComplete}
+          onCancel={handleCropCancel}
+          open={showCropper}
+        />
+      )}
+
+      <div className="mb-8">
             <h1 className="text-3xl font-bold">My Profile</h1>
             <p className="mt-2 text-muted-foreground">Manage your account and preferences</p>
           </div>
@@ -368,18 +439,30 @@ export default function ProfilePage() {
             <Card className="lg:col-span-1">
               <CardContent className="p-6">
                 <div className="flex flex-col items-center text-center">
-                  <div className="relative">
+                  <div className="relative group">
                     <Avatar className="h-24 w-24">
                       <AvatarImage 
-                        src={profile?.profileImage?.url || profile?.profileImage || "/placeholder-user.jpg"} 
-                        alt={profile?.name || "User"}
+                        src={
+                          profile?.profileImage?.url || 
+                          (typeof profile?.profileImage === 'string' ? profile?.profileImage : null) || 
+                          "/placeholder-user.jpg"
+                        } 
+                        alt={`${profile?.firstName || ''} ${profile?.lastName || ''}`}
                         className="object-cover"
+                        onError={(e) => {
+                          console.log("Image load error:", profile?.profileImage)
+                          e.currentTarget.src = "/placeholder-user.jpg"
+                        }}
                       />
-                      <AvatarFallback className="text-2xl">{getInitials(profile?.name || "User")}</AvatarFallback>
+                      <AvatarFallback className="text-2xl">
+                        {getInitials(`${profile?.firstName || ''} ${profile?.lastName || 'User'}`)}
+                      </AvatarFallback>
                     </Avatar>
+                    
+                    {/* Upload button */}
                     <label
                       htmlFor="profile-image"
-                      className="absolute bottom-0 right-0 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                      className="absolute bottom-0 right-0 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg"
                       title="Upload profile image"
                     >
                       <Upload className="h-4 w-4" />
@@ -392,23 +475,28 @@ export default function ProfilePage() {
                         disabled={updating}
                       />
                     </label>
+                    
+                    {/* Delete button - only show if image exists */}
+                    {profile?.profileImage && (
+                      <button
+                        onClick={handleDeleteImage}
+                        disabled={updating}
+                        className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg opacity-0 group-hover:opacity-100"
+                        title="Delete profile image"
+                      >
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
-                  <h2 className="mt-4 text-xl font-bold">{profile?.name || "User"}</h2>
+                  <h2 className="mt-4 text-xl font-bold">
+                    {profile?.firstName || profile?.lastName 
+                      ? `${profile?.firstName || ''} ${profile?.lastName || ''}`.trim()
+                      : "User"}
+                  </h2>
                   <p className="text-sm text-muted-foreground">{profile?.email}</p>
                   <Badge className="mt-3">Verified Account</Badge>
-                  
-                  {profile?.profileImage && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3"
-                      onClick={handleDeleteImage}
-                      disabled={updating}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Remove Photo
-                    </Button>
-                  )}
                   
                   {updating && (
                     <p className="mt-2 text-xs text-muted-foreground">Uploading...</p>
@@ -434,10 +522,9 @@ export default function ProfilePage() {
 
             <div className="lg:col-span-3">
               <Tabs defaultValue="personal" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="personal">Personal Info</TabsTrigger>
                   <TabsTrigger value="addresses">Addresses</TabsTrigger>
-                  <TabsTrigger value="security">Security</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="personal" className="mt-6">
@@ -448,16 +535,22 @@ export default function ProfilePage() {
                         <div className="grid gap-4 sm:grid-cols-2">
                           <div className="space-y-2">
                             <Label htmlFor="firstName">First Name</Label>
-                            <Input
-                              id="firstName"
-                              value={profileForm.firstName}
-                              onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
-                            />
+                            <div className="relative">
+                              <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="firstName"
+                                className="pl-9"
+                                placeholder="John"
+                                value={profileForm.firstName}
+                                onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                              />
+                            </div>
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="lastName">Last Name</Label>
                             <Input
                               id="lastName"
+                              placeholder="Doe"
                               value={profileForm.lastName}
                               onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
                             />
@@ -482,17 +575,34 @@ export default function ProfilePage() {
                           <Label htmlFor="contact">Phone Number</Label>
                           <div className="relative">
                             <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <div className="absolute left-9 top-2.5 text-sm text-muted-foreground">+91</div>
                             <Input
                               id="contact"
                               type="tel"
-                              className="pl-9"
+                              className="pl-[4.5rem] bg-muted cursor-not-allowed"
+                              placeholder="9876543210"
                               value={profileForm.contact}
-                              onChange={(e) => setProfileForm({ ...profileForm, contact: e.target.value })}
+                              disabled
+                              readOnly
                             />
                           </div>
+                          <p className="text-xs text-muted-foreground">
+                            Phone number cannot be changed
+                          </p>
                         </div>
 
-                        <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="grid gap-4 sm:grid-cols-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="age">Age</Label>
+                            <Input
+                              id="age"
+                              type="number"
+                              placeholder="25"
+                              value={profileForm.age}
+                              onChange={(e) => setProfileForm({ ...profileForm, age: e.target.value })}
+                            />
+                          </div>
+
                           <div className="space-y-2">
                             <Label htmlFor="dob">Date of Birth</Label>
                             <Input
@@ -804,35 +914,6 @@ export default function ProfilePage() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="security" className="mt-6">
-                  <Card>
-                    <CardContent className="p-6">
-                      <h3 className="mb-6 text-lg font-semibold">Security Settings</h3>
-                      <div className="space-y-6">
-                        <div>
-                          <h4 className="mb-3 font-medium">Change Password</h4>
-                          <Alert>
-                            <AlertDescription>
-                              Password change functionality will be available soon. Contact support if you need to reset your password.
-                            </AlertDescription>
-                          </Alert>
-                        </div>
-
-                        <Separator />
-
-                        <div>
-                          <h4 className="mb-3 font-medium">Two-Factor Authentication</h4>
-                          <p className="mb-4 text-sm text-muted-foreground">
-                            Add an extra layer of security to your account
-                          </p>
-                          <Button variant="outline" disabled>
-                            Enable 2FA (Coming Soon)
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
               </Tabs>
             </div>
           </div>
