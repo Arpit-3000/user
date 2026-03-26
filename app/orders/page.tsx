@@ -3,13 +3,17 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Package, Calendar, CreditCard, Truck, FileText, RefreshCw, Filter, Download } from 'lucide-react';
+import { Package, Calendar, CreditCard, Truck, FileText, RefreshCw, Filter, Download, RotateCcw, Eye } from 'lucide-react';
 import { getOrders, getOrderStatistics, getOrdersWithFilters, reorderOrder, type Order, type OrderStatistics } from '@/lib/api/orders';
+import { returnUtils, SalesReturn } from '@/lib/api/returns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ReturnRequestModal } from '@/components/return-request-modal';
+import { ReturnsList } from '@/components/returns-list';
+import { ReturnDetailsModal } from '@/components/return-details-modal';
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -19,7 +23,8 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [activeTab, setActiveTab] = useState('all');
+  const [activeTab, setActiveTab] = useState('orders');
+  const [orderSubTab, setOrderSubTab] = useState('all');
   const [reorderingOrderId, setReorderingOrderId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
@@ -30,16 +35,22 @@ export default function OrdersPage() {
     sortOrder: 'desc' as 'asc' | 'desc',
   });
 
+  // Return modal states
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [selectedOrderForReturn, setSelectedOrderForReturn] = useState<Order | null>(null);
+  const [showReturnDetails, setShowReturnDetails] = useState(false);
+  const [selectedReturnForDetails, setSelectedReturnForDetails] = useState<SalesReturn | null>(null);
+
   useEffect(() => {
     fetchData();
-  }, [currentPage, activeTab, filters]);
+  }, [currentPage, orderSubTab, filters]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       
       // Check if we need to use filters or can use simple endpoint
-      const hasFilters = activeTab !== 'all' || 
+      const hasFilters = orderSubTab !== 'all' || 
                         filters.paymentStatus || 
                         filters.startDate || 
                         filters.endDate;
@@ -55,14 +66,14 @@ export default function OrdersPage() {
           sortOrder: filters.sortOrder || 'desc',
         };
 
-        // Add status filter from tab
-        if (activeTab !== 'all') {
+        // Add status filter from sub-tab
+        if (orderSubTab !== 'all') {
           const statusMap: Record<string, string> = {
             'processing': 'Processing',
             'shipped': 'Shipped',
             'delivered': 'Delivered',
           };
-          filterParams.status = statusMap[activeTab];
+          filterParams.status = statusMap[orderSubTab];
         }
 
         // Add additional filters only if they have values
@@ -91,13 +102,13 @@ export default function OrdersPage() {
             let filteredOrders = ordersData.data.orders;
             
             // Apply status filter
-            if (activeTab !== 'all') {
+            if (orderSubTab !== 'all') {
               const statusMap: Record<string, string> = {
                 'processing': 'Processing',
                 'shipped': 'Shipped',
                 'delivered': 'Delivered',
               };
-              const targetStatus = statusMap[activeTab];
+              const targetStatus = statusMap[orderSubTab];
               filteredOrders = filteredOrders.filter((order: Order) => 
                 order.status === targetStatus || order.deliveryStatus === targetStatus
               );
@@ -184,9 +195,22 @@ export default function OrdersPage() {
     return statusMap[status] || 'bg-gray-100 text-gray-800';
   };
 
-  const filterOrdersByStatus = (status: string) => {
-    // Filtering is now done server-side, so just return all orders
-    return orders;
+  const handleReturnRequest = (order: Order) => {
+    setSelectedOrderForReturn(order);
+    setShowReturnModal(true);
+  };
+
+  const handleReturnCreated = () => {
+    // Refresh data or show success message
+    toast({
+      title: "Return request created",
+      description: "Your return request has been submitted successfully"
+    });
+  };
+
+  const handleViewReturn = (returnData: SalesReturn) => {
+    setSelectedReturnForDetails(returnData);
+    setShowReturnDetails(true);
   };
 
   const handleReorder = async (orderId: string) => {
@@ -282,10 +306,10 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* Orders List with Tabs */}
+      {/* Orders List with Sub-tabs only */}
       <div className="flex items-center justify-between mb-4">
-        <Tabs value={activeTab} onValueChange={(value) => {
-          setActiveTab(value);
+        <Tabs value={orderSubTab} onValueChange={(value) => {
+          setOrderSubTab(value);
           setCurrentPage(1);
         }} className="flex-1">
           <TabsList>
@@ -396,35 +420,28 @@ export default function OrdersPage() {
         </Card>
       )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="hidden">
-          <TabsTrigger value="all">All Orders</TabsTrigger>
-          <TabsTrigger value="processing">Processing</TabsTrigger>
-          <TabsTrigger value="shipped">Shipped</TabsTrigger>
-          <TabsTrigger value="delivered">Delivered</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value={activeTab}>
-          {filterOrdersByStatus(activeTab).length === 0 ? (
-            <Card>
-              <CardContent className="p-12 text-center">
-                <Package className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-xl font-semibold mb-2">
-                  {activeTab === 'all' ? 'No orders found' : `No ${activeTab} orders`}
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  {activeTab === 'all' 
-                    ? "You haven't placed any orders yet" 
-                    : `You don't have any ${activeTab} orders at the moment`}
-                </p>
-                {activeTab === 'all' && (
-                  <Button onClick={() => router.push('/')}>Start Shopping</Button>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {filterOrdersByStatus(activeTab).map((order) => (
+      {/* Orders Content */}
+      <div>
+        {orders.length === 0 ? (
+          <Card>
+            <CardContent className="p-12 text-center">
+              <Package className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">
+                {orderSubTab === 'all' ? 'No orders found' : `No ${orderSubTab} orders`}
+              </h3>
+              <p className="text-muted-foreground mb-4">
+                {orderSubTab === 'all' 
+                  ? "You haven't placed any orders yet" 
+                  : `You don't have any ${orderSubTab} orders at the moment`}
+              </p>
+              {orderSubTab === 'all' && (
+                <Button onClick={() => router.push('/')}>Start Shopping</Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {orders.map((order) => (
                 <Card key={order._id} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-6">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
@@ -447,27 +464,40 @@ export default function OrdersPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => router.push(`/orders/${order._id}`)}
-                        >
-                          <FileText className="h-4 w-4 mr-2" />
-                          View Details
-                        </Button>
-                        
-                        {order.deliveryStatus === 'Delivered' && (
+                      <div className="flex flex-col items-end gap-2">
+                        {/* Want to return? - Top right position */}
+                        {returnUtils.isReturnEligible(order.orderedAt) && (
+                          <button
+                            onClick={() => handleReturnRequest(order)}
+                            className="text-sm text-muted-foreground hover:text-orange-600 transition-colors underline decoration-dotted underline-offset-4 hover:decoration-solid"
+                          >
+                            Want to return?
+                          </button>
+                        )}
+
+                        <div className="flex items-center gap-2 flex-wrap">
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleReorder(order._id)}
-                            disabled={reorderingOrderId === order._id}
+                            onClick={() => router.push(`/orders/${order._id}`)}
                           >
-                            <RefreshCw className={`h-4 w-4 mr-2 ${reorderingOrderId === order._id ? 'animate-spin' : ''}`} />
-                            {reorderingOrderId === order._id ? 'Adding...' : 'Reorder'}
+                            <FileText className="h-4 w-4 mr-2" />
+                            View Details
                           </Button>
-                        )}
+                          
+                          {/* Reorder button - Only show for delivered orders */}
+                          {(order.deliveryStatus === 'Delivered' || order.status === 'Delivered') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleReorder(order._id)}
+                              disabled={reorderingOrderId === order._id}
+                            >
+                              <RefreshCw className={`h-4 w-4 mr-2 ${reorderingOrderId === order._id ? 'animate-spin' : ''}`} />
+                              {reorderingOrderId === order._id ? 'Adding...' : 'Reorder'}
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -573,31 +603,74 @@ export default function OrdersPage() {
               ))}
             </div>
           )}
-        </TabsContent>
-      </Tabs>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 mt-6">
-          <Button
-            variant="outline"
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-          >
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-          >
-            Next
-          </Button>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </div>
+
+      {/* Return Request Modal */}
+      {selectedOrderForReturn && (
+        <ReturnRequestModal
+          isOpen={showReturnModal}
+          onClose={() => {
+            setShowReturnModal(false);
+            setSelectedOrderForReturn(null);
+          }}
+          order={{
+            _id: selectedOrderForReturn._id,
+            orderNumber: selectedOrderForReturn.orderNumber,
+            items: selectedOrderForReturn.items.map(item => ({
+              _id: item._id || '',
+              medicineId: item.medicine ? {
+                _id: item.medicine._id,
+                productName: item.medicine.productName,
+                itemCode: (item.medicine as any).itemCode || ''
+              } : undefined,
+              categoryProductId: item.categoryProduct ? {
+                _id: item.categoryProduct._id,
+                productName: item.categoryProduct.productName,
+                itemCode: (item.categoryProduct as any).itemCode || ''
+              } : undefined,
+              productType: item.productType as 'medicine' | 'categoryProduct',
+              quantity: item.quantity,
+              batchNumber: (item as any).batchNumber || undefined,
+              price: item.price
+            })),
+            orderedAt: selectedOrderForReturn.orderedAt
+          }}
+          onReturnCreated={handleReturnCreated}
+        />
       )}
+
+      {/* Return Details Modal */}
+      <ReturnDetailsModal
+        isOpen={showReturnDetails}
+        onClose={() => {
+          setShowReturnDetails(false);
+          setSelectedReturnForDetails(null);
+        }}
+        returnData={selectedReturnForDetails}
+      />
     </div>
   );
 }
