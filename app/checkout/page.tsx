@@ -50,6 +50,27 @@ export default function CheckoutPage() {
     fetchData();
   }, []);
 
+  // Effect to auto-fill name when default address is selected
+  useEffect(() => {
+    if (!useCustomAddress && selectedAddressId && addresses.length > 0) {
+      // If default address is selected, auto-fill name from profile
+      const selectedAddress = addresses.find(addr => addr._id === selectedAddressId);
+      if (selectedAddress?.isDefault) {
+        // Fetch user profile to get name if not already available
+        if (!name) {
+          profileApi.get().then(profileData => {
+            const userName = profileData.name || profileData.user?.name || '';
+            if (userName) {
+              setName(userName);
+            }
+          }).catch(error => {
+            console.error('Error fetching user name:', error);
+          });
+        }
+      }
+    }
+  }, [selectedAddressId, useCustomAddress, addresses, name]);
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -102,11 +123,20 @@ export default function CheckoutPage() {
       
       setAddresses(addressList);
       setContact(profileData.contact || profileData.user?.contact || profileData.phone || profileData.user?.phone || '');
-      setName(profileData.name || profileData.user?.name || '');
+      
+      // Set name from profile
+      const userName = profileData.name || profileData.user?.name || '';
+      setName(userName);
 
       if (addressList.length > 0) {
         const defaultAddr = addressList.find((a: any) => a.isDefault);
-        setSelectedAddressId(defaultAddr?._id || addressList[0]._id);
+        const selectedAddr = defaultAddr || addressList[0];
+        setSelectedAddressId(selectedAddr._id);
+        
+        // If default address is selected and we have user name, auto-fill it
+        if (defaultAddr && userName) {
+          setName(userName);
+        }
       }
 
       // Check prescription status
@@ -532,7 +562,13 @@ export default function CheckoutPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="mt-1"
+                  readOnly={!useCustomAddress && selectedAddressId && addresses.find(addr => addr._id === selectedAddressId)?.isDefault}
                 />
+                {!useCustomAddress && selectedAddressId && addresses.find(addr => addr._id === selectedAddressId)?.isDefault && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Name auto-filled from your profile (default address selected)
+                  </p>
+                )}
               </div>
 
               <div>

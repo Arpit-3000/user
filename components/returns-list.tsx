@@ -52,18 +52,29 @@ export function ReturnsList({ onViewReturn }: ReturnsListProps) {
   const fetchReturns = async () => {
     setLoading(true)
     try {
+      console.log('Fetching returns with filters:', filters);
       const response = await returnsApi.getReturns(filters)
-      setReturns(response.data)
+      console.log('Returns API Response:', response);
+      
+      setReturns(response.data || [])
       setPagination({
-        total: response.total,
-        totalPages: response.totalPages,
-        currentPage: response.currentPage
+        total: response.total || 0,
+        totalPages: response.totalPages || 1,
+        currentPage: response.currentPage || 1
       })
     } catch (error: any) {
+      console.error('Returns fetch error:', error);
       toast({
         title: "Failed to fetch returns",
         description: error.message || "Something went wrong",
         variant: "destructive"
+      })
+      // Set empty state on error
+      setReturns([])
+      setPagination({
+        total: 0,
+        totalPages: 1,
+        currentPage: 1
       })
     } finally {
       setLoading(false)

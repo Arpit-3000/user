@@ -142,11 +142,11 @@ export function ReturnDetailsModal({
                         </div>
                         <div className="flex justify-between">
                           <span className="text-sm text-muted-foreground">Unit Price:</span>
-                          <span className="text-sm font-medium">₹{item.unitPriceAtSale.toFixed(2)}</span>
+                          <span className="text-sm font-medium">₹{item.unitPriceAtSale?.toFixed(2) || '0.00'}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-sm text-muted-foreground">Tax Amount:</span>
-                          <span className="text-sm font-medium">₹{item.taxAmountAtSale.toFixed(2)}</span>
+                          <span className="text-sm font-medium">₹{item.taxAmountAtSale?.toFixed(2) || '0.00'}</span>
                         </div>
                       </div>
                     </div>

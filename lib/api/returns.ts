@@ -1,6 +1,6 @@
 import { API_BASE_URL, getAuthHeaders, handleApiError } from '../api-config'
 
-// Types
+// Types based on actual API response
 export interface ReturnItem {
   productType: 'medicine' | 'categoryProduct'
   medicineId?: string
@@ -9,7 +9,7 @@ export interface ReturnItem {
   returnQuantity: number
   unitBilled?: string
   unitConversion?: number
-  returnReason: 'Expired' | 'Damaged' | 'Wrong Item' | 'Customer Refusal'
+  returnReason: string // Can be custom text now
 }
 
 export interface CreateReturnRequest {
@@ -30,6 +30,15 @@ export interface SalesReturn {
     orderNumber: string
     orderedAt: string
     totalAmount: number
+    items?: Array<{
+      medicineId?: string
+      categoryProductId?: string
+      price: number
+      quantity: number
+      cgstAmount: number
+      sgstAmount: number
+      igstAmount: number
+    }>
   }
   returnNumber: string
   items: Array<{
@@ -53,10 +62,11 @@ export interface SalesReturn {
     returnReason: string
     unitPriceAtSale: number
     taxAmountAtSale: number
+    _id?: string
   }>
   totalReturnAmount: number
   status: 'Requested' | 'In Transit' | 'Received' | 'QC Completed' | 'Rejected'
-  qcStatus: 'Pending' | 'Passed (Restockable)' | 'Failed (Scrap)'
+  qcStatus: 'Pending' | 'Passed (Restockable)' | 'Failed (Scrap)' | 'Rejected'
   creditNoteIssued: boolean
   creditNoteId?: string
   approvalRemarks?: string
@@ -84,7 +94,6 @@ export interface CreateReturnResponse {
   data: SalesReturn
 }
 
-// API Functions
 export const returnsApi = {
   // Create a new sales return
   async createReturn(data: CreateReturnRequest): Promise<CreateReturnResponse> {
@@ -98,7 +107,7 @@ export const returnsApi = {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.message || 'Failed to create return')
+        throw new Error(result.message || result.error || 'Failed to create return')
       }
 
       return result
@@ -135,7 +144,7 @@ export const returnsApi = {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.message || 'Failed to fetch returns')
+        throw new Error(result.message || result.error || 'Failed to fetch returns')
       }
 
       return result
@@ -155,7 +164,7 @@ export const returnsApi = {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.message || 'Failed to fetch return details')
+        throw new Error(result.message || result.error || 'Failed to fetch return details')
       }
 
       return result

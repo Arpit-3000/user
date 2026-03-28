@@ -132,31 +132,47 @@ export function ReturnRequestModal({
 
     setLoading(true)
     try {
-      // Prepare items with custom reasons
-      const itemsWithCustomReasons = items.map((item, index) => {
-        const itemId = Object.keys(selectedItems)[index];
+      // Prepare items with proper API format
+      const apiItems = Object.entries(selectedItems).map(([itemId, item]) => {
+        const orderItem = order.items.find(oi => oi._id === itemId);
+        
         return {
-          ...item,
+          productType: item.productType,
+          medicineId: item.medicineId,
+          categoryProductId: item.categoryProductId,
+          batchNumber: item.batchNumber,
+          returnQuantity: item.returnQuantity,
           returnReason: item.returnReason === 'Other' 
             ? customReasons[itemId] || 'Other' 
-            : item.returnReason
+            : item.returnReason,
+          unitBilled: "Primary", // Default as per API
+          unitConversion: 1 // Default as per API
         };
       });
 
-      await returnsApi.createReturn({
+      console.log('API Request:', {
         originalOrderId: order._id,
-        items: itemsWithCustomReasons
+        items: apiItems
+      });
+
+      const result = await returnsApi.createReturn({
+        originalOrderId: order._id,
+        items: apiItems
       })
+
+      console.log('API Response:', result);
 
       toast({
         title: "Return request created",
-        description: "Your return request has been submitted successfully"
+        description: `Return number: ${result.data?.returnNumber || 'Generated'}`,
       })
 
       onReturnCreated()
       onClose()
       setSelectedItems({})
+      setCustomReasons({})
     } catch (error: any) {
+      console.error('Return API Error:', error);
       toast({
         title: "Failed to create return",
         description: error.message || "Something went wrong",
