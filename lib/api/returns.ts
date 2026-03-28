@@ -9,7 +9,7 @@ export interface ReturnItem {
   returnQuantity: number
   unitBilled?: string
   unitConversion?: number
-  returnReason: string // Can be custom text now
+  returnReason: string
 }
 
 export interface CreateReturnRequest {

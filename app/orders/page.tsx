@@ -3,16 +3,15 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Package, Calendar, CreditCard, Truck, FileText, RefreshCw, Filter, Download, RotateCcw, Eye } from 'lucide-react';
+import { Package, Calendar, CreditCard, Truck, FileText, RefreshCw, Filter } from 'lucide-react';
 import { getOrders, getOrderStatistics, getOrdersWithFilters, reorderOrder, type Order, type OrderStatistics } from '@/lib/api/orders';
 import { returnUtils, SalesReturn } from '@/lib/api/returns';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReturnRequestModal } from '@/components/return-request-modal';
-import { ReturnsList } from '@/components/returns-list';
 import { ReturnDetailsModal } from '@/components/return-details-modal';
 
 export default function OrdersPage() {
@@ -23,7 +22,6 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [activeTab, setActiveTab] = useState('orders');
   const [orderSubTab, setOrderSubTab] = useState('all');
   const [reorderingOrderId, setReorderingOrderId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -37,7 +35,7 @@ export default function OrdersPage() {
 
   // Return modal states
   const [showReturnModal, setShowReturnModal] = useState(false);
-  const [selectedOrderForReturn, setSelectedOrderForReturn] = useState<Order | null>(null);
+  const [selectedOrderIdForReturn, setSelectedOrderIdForReturn] = useState<string | null>(null);
   const [showReturnDetails, setShowReturnDetails] = useState(false);
   const [selectedReturnForDetails, setSelectedReturnForDetails] = useState<SalesReturn | null>(null);
 
@@ -196,27 +194,21 @@ export default function OrdersPage() {
   };
 
   const handleReturnRequest = (order: Order) => {
-    setSelectedOrderForReturn(order);
+    setSelectedOrderIdForReturn(order._id);
     setShowReturnModal(true);
   };
 
   const handleReturnCreated = () => {
-    // Refresh data or show success message
     toast({
       title: "Return request created",
       description: "Your return request has been submitted successfully"
     });
   };
 
-  const handleViewReturn = (returnData: SalesReturn) => {
-    setSelectedReturnForDetails(returnData);
-    setShowReturnDetails(true);
-  };
-
   const handleReorder = async (orderId: string) => {
     setReorderingOrderId(orderId);
     try {
-      const result = await reorderOrder(orderId);
+      await reorderOrder(orderId);
       toast({
         title: 'Success',
         description: 'Items added to cart successfully',
@@ -506,29 +498,22 @@ export default function OrdersPage() {
                       {order.items.slice(0, 4).map((item, index) => {
                         let imageUrl = '';
                         let itemName = '';
-                        let itemType = '';
                         
                         if (item.medicine) {
                           imageUrl = item.medicine.image;
                           itemName = item.medicine.productName;
-                          itemType = 'Medicine';
                         } else if (item.categoryProduct) {
                           imageUrl = item.categoryProduct.image;
                           itemName = item.categoryProduct.productName;
-                          itemType = 'Product';
                         } else if (item.labTest) {
                           itemName = item.labTest.testName;
-                          itemType = 'Lab Test';
                         } else {
                           // Fallback when details aren't populated
                           if (item.productType === 'medicine') {
-                            itemType = 'Medicine';
                             itemName = 'Medicine Item';
                           } else if (item.productType === 'labTest') {
-                            itemType = 'Lab Test';
                             itemName = 'Lab Test';
                           } else {
-                            itemType = 'Product';
                             itemName = 'Product Item';
                           }
                         }
@@ -629,35 +614,14 @@ export default function OrdersPage() {
         </div>
 
       {/* Return Request Modal */}
-      {selectedOrderForReturn && (
+      {selectedOrderIdForReturn && (
         <ReturnRequestModal
           isOpen={showReturnModal}
           onClose={() => {
             setShowReturnModal(false);
-            setSelectedOrderForReturn(null);
+            setSelectedOrderIdForReturn(null);
           }}
-          order={{
-            _id: selectedOrderForReturn._id,
-            orderNumber: selectedOrderForReturn.orderNumber,
-            items: selectedOrderForReturn.items.map(item => ({
-              _id: item._id || '',
-              medicineId: item.medicine ? {
-                _id: item.medicine._id,
-                productName: item.medicine.productName,
-                itemCode: (item.medicine as any).itemCode || ''
-              } : undefined,
-              categoryProductId: item.categoryProduct ? {
-                _id: item.categoryProduct._id,
-                productName: item.categoryProduct.productName,
-                itemCode: (item.categoryProduct as any).itemCode || ''
-              } : undefined,
-              productType: item.productType as 'medicine' | 'categoryProduct',
-              quantity: item.quantity,
-              batchNumber: (item as any).batchNumber || undefined,
-              price: item.price
-            })),
-            orderedAt: selectedOrderForReturn.orderedAt
-          }}
+          orderId={selectedOrderIdForReturn}
           onReturnCreated={handleReturnCreated}
         />
       )}
