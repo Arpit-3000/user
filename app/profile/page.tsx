@@ -12,6 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Progress } from "@/components/ui/progress"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Mail,
   Phone,
@@ -22,10 +29,15 @@ import {
   Plus,
   Home,
   Briefcase,
+  User,
+  FileText,
 } from "lucide-react"
 import { format } from "date-fns"
 import { profileApi, type Address } from "@/lib/api/profile"
 import { useToast } from "@/hooks/use-toast"
+
+import { ImageCropper } from "@/components/image-cropper"
+import { PrescriptionViewerModal } from "@/components/prescription-viewer-modal"
 
 export default function ProfilePage() {
   const { toast } = useToast()
@@ -35,6 +47,23 @@ export default function ProfilePage() {
   const [profile, setProfile] = React.useState<any>(null)
   const [addresses, setAddresses] = React.useState<Address[]>([])
   const [showAddressForm, setShowAddressForm] = React.useState(false)
+  const [prescriptions, setPrescriptions] = React.useState<any[]>([])
+  const [loadingPrescriptions, setLoadingPrescriptions] = React.useState(false)
+  const [uploadingPrescription, setUploadingPrescription] = React.useState(false)
+  const [uploadProgress, setUploadProgress] = React.useState(0)
+  const [viewPrescriptionModal, setViewPrescriptionModal] = React.useState<{
+    isOpen: boolean;
+    imageUrl: string;
+    title: string;
+  }>({
+    isOpen: false,
+    imageUrl: '',
+    title: ''
+  })
+  
+  // Image cropper states
+  const [imageToCrop, setImageToCrop] = React.useState<string | null>(null)
+  const [showCropper, setShowCropper] = React.useState(false)
 
   // Check authentication on mount
   React.useEffect(() => {
@@ -50,6 +79,7 @@ export default function ProfilePage() {
     contact: "",
     gender: "",
     dob: "",
+    age: "",
     street: "",
     city: "",
     state: "",
@@ -75,20 +105,47 @@ export default function ProfilePage() {
   React.useEffect(() => {
     loadProfile()
     loadAddresses()
+    loadPrescriptions()
   }, [])
 
   const loadProfile = async () => {
     try {
       const data = await profileApi.get()
-      console.log("Profile data loaded:", data) // Debug log
+      console.log("Profile data loaded:", data)
+      console.log("Profile image data:", data?.profileImage) // Debug profile image
       setProfile(data)
+      
+      // Clean contact number for display (remove +91 if present)
+      let displayContact = data.contact || ""
+      if (displayContact.startsWith("+91")) {
+        displayContact = displayContact.substring(3)
+      }
+      
+      // Normalize gender to capitalize first letter
+      let normalizedGender = data.gender || ""
+      if (normalizedGender) {
+        normalizedGender = normalizedGender.charAt(0).toUpperCase() + normalizedGender.slice(1).toLowerCase()
+      }
+      
+      // Format DOB for date input (YYYY-MM-DD)
+      let formattedDob = ""
+      if (data.dob) {
+        try {
+          const date = new Date(data.dob)
+          formattedDob = date.toISOString().split('T')[0]
+        } catch (e) {
+          console.error("Error formatting DOB:", e)
+        }
+      }
+      
       setProfileForm({
         firstName: data.firstName || "",
         lastName: data.lastName || "",
         email: data.email || "",
-        contact: data.contact || "",
-        gender: data.gender || "",
-        dob: data.dob || "",
+        contact: displayContact,
+        gender: normalizedGender,
+        dob: formattedDob,
+        age: data.age?.toString() || "",
         street: data.address?.street || "",
         city: data.address?.city || "",
         state: data.address?.state || "",
@@ -118,6 +175,103 @@ export default function ProfilePage() {
     }
   }
 
+  const loadPrescriptions = async () => {
+    setLoadingPrescriptions(true)
+    try {
+      // Import prescription API
+      const { getMyPrescriptions } = await import("@/lib/api/prescriptions")
+      const prescriptions = await getMyPrescriptions() // Now returns array directly
+      
+      setPrescriptions(prescriptions)
+    } catch (error) {
+      console.error("Failed to load prescriptions:", error)
+      setPrescriptions([])
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to load prescriptions",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingPrescriptions(false)
+    }
+  }
+
+  const handlePrescriptionUpload = async (file: File) => {
+    setUploadingPrescription(true)
+    setUploadProgress(0)
+    
+    try {
+      // Simulate progress for better UX
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval)
+            return 90
+          }
+          return prev + 10
+        })
+      }, 200)
+
+      const { uploadPrescription } = await import("@/lib/api/prescriptions")
+      await uploadPrescription(file)
+      
+      // Complete progress
+      clearInterval(progressInterval)
+      setUploadProgress(100)
+      
+      toast({
+        title: "Success",
+        description: "Prescription uploaded successfully",
+      })
+      
+      // Reload prescriptions
+      await loadPrescriptions()
+    } catch (error: any) {
+      setUploadProgress(0)
+      toast({
+        title: "Upload Failed",
+        description: error.message || "Prescription not uploaded. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setUploadingPrescription(false)
+      setTimeout(() => setUploadProgress(0), 1000)
+    }
+  }
+
+  const handleDeletePrescription = async (prescriptionId: string) => {
+    if (!confirm("Are you sure you want to delete this prescription?")) {
+      return
+    }
+
+    try {
+      const { deletePrescription } = await import("@/lib/api/prescriptions")
+      await deletePrescription(prescriptionId)
+      
+      toast({
+        title: "Success",
+        description: "Prescription deleted successfully",
+      })
+      
+      // Reload prescriptions
+      loadPrescriptions()
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete prescription",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleViewPrescription = (imageUrl: string, title: string = "Prescription") => {
+    setViewPrescriptionModal({
+      isOpen: true,
+      imageUrl,
+      title
+    })
+  }
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setUpdating(true)
@@ -127,9 +281,10 @@ export default function ProfilePage() {
         firstName: profileForm.firstName,
         lastName: profileForm.lastName,
         email: profileForm.email,
-        contact: profileForm.contact,
+        // contact is not editable, so don't send it
         gender: profileForm.gender,
         dob: profileForm.dob,
+        age: profileForm.age ? parseInt(profileForm.age) : undefined,
         address: {
           street: profileForm.street,
           city: profileForm.city,
@@ -180,25 +335,47 @@ export default function ProfilePage() {
       return
     }
 
+    // Create a preview URL for cropping
+    const reader = new FileReader()
+    reader.onload = () => {
+      setImageToCrop(reader.result as string)
+      setShowCropper(true)
+    }
+    reader.readAsDataURL(file)
+    
+    // Reset the input
+    e.target.value = ""
+  }
+
+  const handleCropComplete = async (croppedImageBlob: Blob) => {
+    setShowCropper(false)
     setUpdating(true)
+    
     try {
-      const result = await profileApi.uploadProfileImage(file)
-      console.log("Image upload result:", result) // Debug log
+      // Convert blob to file
+      const croppedFile = new File([croppedImageBlob], "profile-image.jpg", {
+        type: "image/jpeg",
+      })
+      
+      const result = await profileApi.uploadProfileImage(croppedFile)
+      console.log("Image upload result:", result)
+      
       if (result.success) {
         const newProfileImage = result.profileImage || result.user?.profileImage
+        console.log("New profile image:", newProfileImage)
+        
         toast({
           title: "Success",
           description: "Profile image updated successfully",
         })
-        // Update profile state immediately with new image
-        setProfile((prev: any) => ({
-          ...prev,
-          profileImage: newProfileImage,
-        }))
-        // Update localStorage using helper function
-        updateUserProfile({ profileImage: newProfileImage })
-        // Trigger a page reload event to update navbar
-        window.dispatchEvent(new Event("storage"))
+        
+        // Update localStorage with new image
+        if (newProfileImage) {
+          updateUserProfile({ profileImage: newProfileImage })
+        }
+        
+        // Reload the page to show updated image everywhere
+        window.location.reload()
       } else {
         toast({
           title: "Error",
@@ -215,7 +392,13 @@ export default function ProfilePage() {
       })
     } finally {
       setUpdating(false)
+      setImageToCrop(null)
     }
+  }
+
+  const handleCropCancel = () => {
+    setShowCropper(false)
+    setImageToCrop(null)
   }
 
   const handleDeleteImage = async () => {
@@ -224,21 +407,19 @@ export default function ProfilePage() {
     setUpdating(true)
     try {
       const result = await profileApi.deleteProfileImage()
-      console.log("Image delete result:", result) // Debug log
+      console.log("Image delete result:", result)
+      
       if (result.success) {
         toast({
           title: "Success",
           description: "Profile image deleted successfully",
         })
-        // Update profile state immediately
-        setProfile((prev: any) => ({
-          ...prev,
-          profileImage: null,
-        }))
-        // Update localStorage using helper function
+        
+        // Update localStorage
         updateUserProfile({ profileImage: null })
-        // Trigger a page reload event to update navbar
-        window.dispatchEvent(new Event("storage"))
+        
+        // Reload page to show updated state everywhere
+        window.location.reload()
       } else {
         toast({
           title: "Error",
@@ -359,7 +540,17 @@ export default function ProfilePage() {
 
   return (
     <div className="container px-4 py-8 md:px-6">
-          <div className="mb-8">
+      {/* Image Cropper Dialog */}
+      {imageToCrop && (
+        <ImageCropper
+          image={imageToCrop}
+          onCropComplete={handleCropComplete}
+          onCancel={handleCropCancel}
+          open={showCropper}
+        />
+      )}
+
+      <div className="mb-8">
             <h1 className="text-3xl font-bold">My Profile</h1>
             <p className="mt-2 text-muted-foreground">Manage your account and preferences</p>
           </div>
@@ -368,18 +559,30 @@ export default function ProfilePage() {
             <Card className="lg:col-span-1">
               <CardContent className="p-6">
                 <div className="flex flex-col items-center text-center">
-                  <div className="relative">
+                  <div className="relative group">
                     <Avatar className="h-24 w-24">
                       <AvatarImage 
-                        src={profile?.profileImage?.url || profile?.profileImage || "/placeholder-user.jpg"} 
-                        alt={profile?.name || "User"}
+                        src={
+                          profile?.profileImage?.url || 
+                          (typeof profile?.profileImage === 'string' ? profile?.profileImage : null) || 
+                          "/placeholder-user.jpg"
+                        } 
+                        alt={`${profile?.firstName || ''} ${profile?.lastName || ''}`}
                         className="object-cover"
+                        onError={(e) => {
+                          console.log("Image load error:", profile?.profileImage)
+                          e.currentTarget.src = "/placeholder-user.jpg"
+                        }}
                       />
-                      <AvatarFallback className="text-2xl">{getInitials(profile?.name || "User")}</AvatarFallback>
+                      <AvatarFallback className="text-2xl">
+                        {getInitials(`${profile?.firstName || ''} ${profile?.lastName || 'User'}`)}
+                      </AvatarFallback>
                     </Avatar>
+                    
+                    {/* Upload button */}
                     <label
                       htmlFor="profile-image"
-                      className="absolute bottom-0 right-0 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                      className="absolute bottom-0 right-0 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg"
                       title="Upload profile image"
                     >
                       <Upload className="h-4 w-4" />
@@ -392,23 +595,28 @@ export default function ProfilePage() {
                         disabled={updating}
                       />
                     </label>
+                    
+                    {/* Delete button - only show if image exists */}
+                    {profile?.profileImage && (
+                      <button
+                        onClick={handleDeleteImage}
+                        disabled={updating}
+                        className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg opacity-0 group-hover:opacity-100"
+                        title="Delete profile image"
+                      >
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
-                  <h2 className="mt-4 text-xl font-bold">{profile?.name || "User"}</h2>
+                  <h2 className="mt-4 text-xl font-bold">
+                    {profile?.firstName || profile?.lastName 
+                      ? `${profile?.firstName || ''} ${profile?.lastName || ''}`.trim()
+                      : "User"}
+                  </h2>
                   <p className="text-sm text-muted-foreground">{profile?.email}</p>
                   <Badge className="mt-3">Verified Account</Badge>
-                  
-                  {profile?.profileImage && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3"
-                      onClick={handleDeleteImage}
-                      disabled={updating}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Remove Photo
-                    </Button>
-                  )}
                   
                   {updating && (
                     <p className="mt-2 text-xs text-muted-foreground">Uploading...</p>
@@ -437,7 +645,7 @@ export default function ProfilePage() {
                 <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="personal">Personal Info</TabsTrigger>
                   <TabsTrigger value="addresses">Addresses</TabsTrigger>
-                  <TabsTrigger value="security">Security</TabsTrigger>
+                  <TabsTrigger value="prescriptions">My Prescriptions</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="personal" className="mt-6">
@@ -448,16 +656,22 @@ export default function ProfilePage() {
                         <div className="grid gap-4 sm:grid-cols-2">
                           <div className="space-y-2">
                             <Label htmlFor="firstName">First Name</Label>
-                            <Input
-                              id="firstName"
-                              value={profileForm.firstName}
-                              onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
-                            />
+                            <div className="relative">
+                              <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="firstName"
+                                className="pl-9"
+                                placeholder="John"
+                                value={profileForm.firstName}
+                                onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                              />
+                            </div>
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="lastName">Last Name</Label>
                             <Input
                               id="lastName"
+                              placeholder="Doe"
                               value={profileForm.lastName}
                               onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
                             />
@@ -482,17 +696,34 @@ export default function ProfilePage() {
                           <Label htmlFor="contact">Phone Number</Label>
                           <div className="relative">
                             <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <div className="absolute left-9 top-2.5 text-sm text-muted-foreground">+91</div>
                             <Input
                               id="contact"
                               type="tel"
-                              className="pl-9"
+                              className="pl-[4.5rem] bg-muted cursor-not-allowed"
+                              placeholder="9876543210"
                               value={profileForm.contact}
-                              onChange={(e) => setProfileForm({ ...profileForm, contact: e.target.value })}
+                              disabled
+                              readOnly
                             />
                           </div>
+                          <p className="text-xs text-muted-foreground">
+                            Phone number cannot be changed
+                          </p>
                         </div>
 
-                        <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="grid gap-4 sm:grid-cols-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="age">Age</Label>
+                            <Input
+                              id="age"
+                              type="number"
+                              placeholder="25"
+                              value={profileForm.age}
+                              onChange={(e) => setProfileForm({ ...profileForm, age: e.target.value })}
+                            />
+                          </div>
+
                           <div className="space-y-2">
                             <Label htmlFor="dob">Date of Birth</Label>
                             <Input
@@ -804,38 +1035,208 @@ export default function ProfilePage() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="security" className="mt-6">
-                  <Card>
-                    <CardContent className="p-6">
-                      <h3 className="mb-6 text-lg font-semibold">Security Settings</h3>
-                      <div className="space-y-6">
+                <TabsContent value="prescriptions" className="mt-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold">My Prescriptions</h3>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{prescriptions.length} Prescription{prescriptions.length !== 1 ? 's' : ''}</Badge>
                         <div>
-                          <h4 className="mb-3 font-medium">Change Password</h4>
-                          <Alert>
-                            <AlertDescription>
-                              Password change functionality will be available soon. Contact support if you need to reset your password.
-                            </AlertDescription>
-                          </Alert>
-                        </div>
-
-                        <Separator />
-
-                        <div>
-                          <h4 className="mb-3 font-medium">Two-Factor Authentication</h4>
-                          <p className="mb-4 text-sm text-muted-foreground">
-                            Add an extra layer of security to your account
-                          </p>
-                          <Button variant="outline" disabled>
-                            Enable 2FA (Coming Soon)
-                          </Button>
+                          <input
+                            type="file"
+                            id="prescription-upload"
+                            accept="image/jpeg,image/jpg,image/png,application/pdf"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              if (file) {
+                                // Validate file type
+                                const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf']
+                                if (!validTypes.includes(file.type)) {
+                                  toast({
+                                    title: "Invalid File Type",
+                                    description: "Only JPG, PNG, and PDF files are allowed",
+                                    variant: "destructive",
+                                  })
+                                  return
+                                }
+                                
+                                // Validate file size (5MB)
+                                const maxSize = 5 * 1024 * 1024
+                                if (file.size > maxSize) {
+                                  toast({
+                                    title: "File Too Large",
+                                    description: "File size should not exceed 5MB",
+                                    variant: "destructive",
+                                  })
+                                  return
+                                }
+                                
+                                handlePrescriptionUpload(file)
+                                e.target.value = '' // Reset input
+                              }
+                            }}
+                            className="hidden"
+                          />
+                          <label htmlFor="prescription-upload">
+                            <Button asChild disabled={uploadingPrescription}>
+                              <span className="cursor-pointer">
+                                <Upload className="mr-2 h-4 w-4" />
+                                {uploadingPrescription ? 'Uploading...' : 'Upload Prescription'}
+                              </span>
+                            </Button>
+                          </label>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+
+                    {/* Upload Progress Bar */}
+                    {uploadingPrescription && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Uploading prescription...</span>
+                          <span className="font-medium">{uploadProgress}%</span>
+                        </div>
+                        <Progress value={uploadProgress} className="h-2" />
+                      </div>
+                    )}
+
+                    <Alert>
+                      <FileText className="h-4 w-4" />
+                      <AlertDescription>
+                        Upload your prescriptions here to use them later when ordering prescription medicines. 
+                        Accepted formats: JPG, PNG, PDF (Max 5MB)
+                      </AlertDescription>
+                    </Alert>
+
+
+
+                    {loadingPrescriptions ? (
+                      <Card>
+                        <CardContent className="p-12 text-center">
+                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                          <p className="text-muted-foreground">Loading prescriptions...</p>
+                        </CardContent>
+                      </Card>
+                    ) : prescriptions.length === 0 ? (
+                      <Card>
+                        <CardContent className="p-12 text-center">
+                          <FileText className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                          <h3 className="mb-2 text-lg font-semibold">No Prescriptions Yet</h3>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            Upload your prescriptions to keep them handy for future orders
+                          </p>
+                          <label htmlFor="prescription-upload">
+                            <Button asChild variant="outline" disabled={uploadingPrescription}>
+                              <span className="cursor-pointer">
+                                <Upload className="mr-2 h-4 w-4" />
+                                {uploadingPrescription ? 'Uploading...' : 'Upload Your First Prescription'}
+                              </span>
+                            </Button>
+                          </label>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {prescriptions.map((prescription) => (
+                          <Card key={prescription._id} className="overflow-hidden">
+                            <div className="relative aspect-[3/4] bg-muted">
+                              {prescription.imageUrl.endsWith('.pdf') ? (
+                                <div className="h-full flex flex-col items-center justify-center p-4">
+                                  <FileText className="h-16 w-16 text-muted-foreground mb-2" />
+                                  <p className="text-sm text-center text-muted-foreground">PDF Document</p>
+                                </div>
+                              ) : (
+                                <img
+                                  src={prescription.imageUrl}
+                                  alt="Prescription"
+                                  className="h-full w-full object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                                  onClick={() => handleViewPrescription(
+                                    prescription.imageUrl, 
+                                    `Prescription - ${new Date(prescription.createdAt).toLocaleDateString('en-IN')}`
+                                  )}
+                                />
+                              )}
+                            </div>
+                            <CardContent className="p-4">
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Badge 
+                                    variant={
+                                      prescription.status === 'approved' 
+                                        ? 'default' 
+                                        : prescription.status === 'rejected'
+                                        ? 'destructive'
+                                        : 'secondary'
+                                    }
+                                    className="text-xs"
+                                  >
+                                    {prescription.status === 'pending' && '📋 Pending'}
+                                    {prescription.status === 'processing' && '🔍 Processing'}
+                                    {prescription.status === 'approved' && '✅ Approved'}
+                                    {prescription.status === 'rejected' && '❌ Rejected'}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  Uploaded: {new Date(prescription.createdAt).toLocaleDateString('en-IN', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })}
+                                </p>
+                                {prescription.dateIssued && (
+                                  <p className="text-xs text-muted-foreground">
+                                    Issued: {new Date(prescription.dateIssued).toLocaleDateString('en-IN', {
+                                      day: 'numeric',
+                                      month: 'short',
+                                      year: 'numeric',
+                                    })}
+                                  </p>
+                                )}
+                                {prescription.processedBy && (
+                                  <p className="text-xs text-muted-foreground">
+                                    Processed by: {prescription.processedBy.name}
+                                  </p>
+                                )}
+                                <div className="flex gap-2 pt-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1"
+                                    onClick={() => handleViewPrescription(
+                                      prescription.imageUrl, 
+                                      `Prescription - ${new Date(prescription.createdAt).toLocaleDateString('en-IN')}`
+                                    )}
+                                  >
+                                    View
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDeletePrescription(prescription._id)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </TabsContent>
+
               </Tabs>
             </div>
           </div>
+
+          {/* Prescription View Modal */}
+          <PrescriptionViewerModal
+            isOpen={viewPrescriptionModal.isOpen}
+            onClose={() => setViewPrescriptionModal(prev => ({ ...prev, isOpen: false }))}
+            imageUrl={viewPrescriptionModal.imageUrl}
+            title={viewPrescriptionModal.title}
+          />
         </div>
-  )
-}
+    )
+  }

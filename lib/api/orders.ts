@@ -71,6 +71,7 @@ export interface Order {
   deliveryStatus: string;
   paymentStatus: string;
   paymentMethod: string;
+  razorpayPaymentId?: string;
   address: string;
   contact: string;
   hasLabTests?: boolean;
@@ -80,7 +81,17 @@ export interface Order {
   prescriptionVerified?: boolean;
   prescriptionVerificationStatus?: string;
   hasPrescriptionRequired?: boolean;
-  medicineSubstitutions?: any[];
+  prescriptionImages?: string[];
+  medicineSubstitutions?: Array<{
+    originalMedicine: string;
+    substituteMedicine: string;
+    reason: string;
+  }>;
+  deliveryPartner?: {
+    _id: string;
+    name: string;
+    phone: string;
+  };
 }
 
 export interface PlaceOrderRequest {
@@ -95,18 +106,7 @@ export interface PlaceOrderRequest {
 export interface PlaceOrderResponse {
   success: boolean;
   message: string;
-  order: Order;
-  prescriptionStatus: {
-    hasPrescriptionRequired: boolean;
-    prescriptionVerified: boolean;
-    prescriptionVerificationStatus: string;
-    prescriptionRequiredMedicines: any[];
-    prescriptionNotRequiredMedicines: any[];
-    prescriptionRequiredCount: number;
-    prescriptionNotRequiredCount: number;
-    message: string;
-    statusMessage: string;
-  };
+  orderId: string;
 }
 
 export interface OrdersResponse {
@@ -231,6 +231,7 @@ export interface LabTestOrder {
 
 /**
  * Place order from cart
+ * Endpoint: POST /api/orders/place-from-cart
  */
 export async function placeOrder(data: PlaceOrderRequest): Promise<PlaceOrderResponse> {
   const token = getAuthToken();
@@ -258,7 +259,8 @@ export async function placeOrder(data: PlaceOrderRequest): Promise<PlaceOrderRes
 }
 
 /**
- * Get all orders with pagination (simple view)
+ * Get all orders with pagination
+ * Endpoint: GET /api/orders/my-orders
  */
 export async function getOrders(page = 1, limit = 10): Promise<OrdersResponse> {
   const token = getAuthToken();
@@ -267,7 +269,7 @@ export async function getOrders(page = 1, limit = 10): Promise<OrdersResponse> {
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/orders/?page=${page}&limit=${limit}`, {
+  const response = await fetch(`${API_BASE_URL}/orders/my-orders?page=${page}&limit=${limit}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
     },
@@ -327,21 +329,28 @@ export async function getOrdersWithFilters(filters: {
   }
 
   const queryParams = new URLSearchParams();
+  
+  // Only add parameters that have actual values (not empty strings)
   Object.entries(filters).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
+    if (value !== undefined && value !== null && value !== '') {
       queryParams.append(key, value.toString());
     }
   });
 
-  const response = await fetch(`${API_BASE_URL}/orders/filter?${queryParams}`, {
+  const url = `${API_BASE_URL}/orders/my-orders/filter?${queryParams}`;
+  console.log('Fetching orders from:', url);
+
+  const response = await fetch(url, {
     headers: {
       'Authorization': `Bearer ${token}`,
     },
   });
 
   const result = await response.json();
+  console.log('API Response:', result);
 
   if (!response.ok) {
+    console.error('API Error:', result);
     throw new Error(result.message || 'Failed to fetch orders');
   }
 
@@ -375,7 +384,8 @@ export async function cancelOrder(orderId: string): Promise<{ message: string; o
 }
 
 /**
- * Check prescription status
+ * Check prescription status for cart items
+ * Note: This checks cart items directly since the API endpoint may not exist
  */
 export async function checkPrescriptionStatus(cartId: string): Promise<any> {
   const token = getAuthToken();
@@ -384,19 +394,104 @@ export async function checkPrescriptionStatus(cartId: string): Promise<any> {
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/orders/check-prescription/${cartId}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  });
+  try {
+    // Try the documented endpoint first
+    const response = await fetch(`${API_BASE_URL}/orders/prescription-status/${cartId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
 
-  const result = await response.json();
+    const result = await response.json();
 
-  if (!response.ok) {
-    throw new Error(result.message || result.error || 'Failed to check prescription status');
+    if (response.ok) {
+      // NEW: Check success field and return data
+      if (result.success) {
+        return result.data;
+      } else {
+        throw new Error(result.message || 'Failed to check prescription status');
+      }
+    }
+
+    // If endpoint doesn't exist (404), check cart items directly
+    if (response.status === 404) {
+      const { getCart } = await import('./cart');
+      const cartData = await getCart();
+      
+      const prescriptionRequiredMedicines = cartData.cart.items.filter(
+        (item: any) => item.medicineId?.prescriptionRequired === true
+      );
+      
+      const prescriptionNotRequiredMedicines = cartData.cart.items.filter(
+        (item: any) => item.medicineId?.prescriptionRequired !== true
+      );
+      
+      return {
+        success: true,
+        message: 'Prescription status checked successfully',
+        data: {
+          cartId: cartId,
+          totalAmount: cartData.cart.totalPrice,
+          prescriptionStatus: {
+            hasPrescriptionRequired: prescriptionRequiredMedicines.length > 0,
+            prescriptionRequiredMedicines: prescriptionRequiredMedicines.map((item: any) => ({
+              medicineId: item.medicineId._id,
+              productName: item.medicineId.productName,
+              quantity: item.quantity,
+              price: item.medicineId.pricing.sellingPrice,
+              prescriptionRequired: true,
+              category: item.medicineId.category,
+              imageUrl: item.medicineId.images?.[0] || '',
+            })),
+            prescriptionNotRequiredMedicines: prescriptionNotRequiredMedicines.map((item: any) => ({
+              medicineId: item.medicineId._id,
+              productName: item.medicineId.productName,
+              quantity: item.quantity,
+              price: item.medicineId.pricing.sellingPrice,
+              prescriptionRequired: false,
+              category: item.medicineId.category,
+              imageUrl: item.medicineId.images?.[0] || '',
+            })),
+            prescriptionRequiredCount: prescriptionRequiredMedicines.length,
+            prescriptionNotRequiredCount: prescriptionNotRequiredMedicines.length,
+            totalItems: cartData.cart.items.length,
+          },
+          message: prescriptionRequiredMedicines.length > 0
+            ? `⚠️ This cart contains ${prescriptionRequiredMedicines.length} prescription medicine(s). You will need a valid prescription to complete the order.`
+            : 'No prescription required for items in cart',
+        },
+      };
+    }
+
+    const errorResult = await response.json();
+    throw new Error(errorResult.message || errorResult.error || 'Failed to check prescription status');
+  } catch (error: any) {
+    // If it's a network error or other error, try cart fallback
+    if (error.message === 'Failed to check prescription status') {
+      throw error;
+    }
+    
+    try {
+      const { getCart } = await import('./cart');
+      const cartData = await getCart();
+      
+      const prescriptionRequiredMedicines = cartData.cart.items.filter(
+        (item: any) => item.medicineId?.prescriptionRequired === true
+      );
+      
+      return {
+        success: true,
+        data: {
+          prescriptionStatus: {
+            hasPrescriptionRequired: prescriptionRequiredMedicines.length > 0,
+            prescriptionRequiredCount: prescriptionRequiredMedicines.length,
+          },
+        },
+      };
+    } catch (fallbackError) {
+      throw error;
+    }
   }
-
-  return result;
 }
 
 /**
@@ -427,6 +522,8 @@ export async function reorderOrder(orderId: string): Promise<any> {
 
 /**
  * Get order statistics
+ * Endpoint: GET /api/orders/statistics
+ * Note: This endpoint may not exist on all backends
  */
 export async function getOrderStatistics(): Promise<{ success: boolean; message: string; statistics: OrderStatistics }> {
   const token = getAuthToken();
@@ -435,19 +532,24 @@ export async function getOrderStatistics(): Promise<{ success: boolean; message:
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/orders/stats/overview`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/orders/statistics`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
 
-  const result = await response.json();
+    if (!response.ok) {
+      // If endpoint doesn't exist or returns error, throw to use fallback
+      throw new Error('Statistics endpoint not available');
+    }
 
-  if (!response.ok) {
-    throw new Error(result.message || 'Failed to fetch statistics');
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    // Return empty statistics that will be calculated from orders
+    throw new Error('Statistics not available');
   }
-
-  return result;
 }
 
 /**
@@ -484,6 +586,7 @@ export async function downloadInvoice(orderId: string): Promise<void> {
 
 /**
  * Get lab test results
+ * Endpoint: GET /api/orders/my-lab-results
  */
 export async function getLabTestResults(page = 1, limit = 10, status?: string): Promise<any> {
   const token = getAuthToken();
@@ -512,12 +615,105 @@ export async function getLabTestResults(page = 1, limit = 10, status?: string): 
   return result;
 }
 
+/**
+ * Upload prescription for order
+ * Endpoint: POST /api/orders/:orderId/prescription
+ */
+export async function uploadPrescription(orderId: string, files: File[]): Promise<any> {
+  const token = getAuthToken();
+  
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const formData = new FormData();
+  files.forEach(file => {
+    formData.append('files', file);
+  });
+
+  const response = await fetch(`${API_BASE_URL}/orders/${orderId}/prescription`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const result = await response.json();
+  
+  // NEW: Check success field
+  if (result.success) {
+    return result.data;
+  } else {
+    throw new Error(result.message || 'Failed to upload prescription');
+  }
+}
+
+/**
+ * Get prescription images for order
+ * Endpoint: GET /api/orders/:orderId/prescription
+ */
+export async function getPrescriptionImages(orderId: string): Promise<any> {
+  const token = getAuthToken();
+  
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/orders/${orderId}/prescription`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  const result = await response.json();
+
+  // NEW: Check success field
+  if (result.success) {
+    return result;
+  } else {
+    throw new Error(result.message || 'Failed to fetch prescription images');
+  }
+}
+
+/**
+ * Delete prescription image
+ * Endpoint: DELETE /api/orders/:orderId/prescription/:imageKey
+ */
+export async function deletePrescriptionImage(orderId: string, imageUrl: string): Promise<any> {
+  const token = getAuthToken();
+  
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  // Extract S3 key from URL
+  const urlObj = new URL(imageUrl);
+  const imageKey = encodeURIComponent(urlObj.pathname.substring(1));
+
+  const response = await fetch(`${API_BASE_URL}/orders/${orderId}/prescription/${imageKey}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  const result = await response.json();
+
+  // NEW: Check success field
+  if (result.success) {
+    return result.data;
+  } else {
+    throw new Error(result.message || 'Failed to delete prescription image');
+  }
+}
+
 // ============================================================================
 // LAB TEST ORDER API FUNCTIONS
 // ============================================================================
 
 /**
- * Create lab test order
+ * Create lab test order (Book directly without cart)
  */
 export async function createLabTestOrder(data: {
   tests: Array<{ labTestId: string }>;
@@ -526,7 +722,14 @@ export async function createLabTestOrder(data: {
   patientGender: string;
   contactPhone: string;
   contactEmail?: string;
-  address: string;
+  address: {
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    pincode: string;
+    landmark?: string;
+  };
   homeCollection?: boolean;
   preferredDate?: string;
   preferredSlot?: { start: string; end: string };
@@ -539,7 +742,8 @@ export async function createLabTestOrder(data: {
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE_URL}/lab-test-orders`, {
+  // Try the documented endpoint first
+  let response = await fetch(`${API_BASE_URL}/lab-test-orders`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -548,10 +752,22 @@ export async function createLabTestOrder(data: {
     body: JSON.stringify(data),
   });
 
+  // If 404, try alternative endpoint
+  if (response.status === 404) {
+    response = await fetch(`${API_BASE_URL}/orders/lab-test`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+  }
+
   const result = await response.json();
 
   if (!response.ok) {
-    throw new Error(result.message || 'Failed to create lab test order');
+    throw new Error(result.message || result.error || 'Failed to create lab test order');
   }
 
   return result;

@@ -211,9 +211,9 @@ export default function MedicineDetailPage() {
     )
   }
 
-  // Check stock availability - Always show as available regardless of backend stock value
+  // Check stock availability using totalQuantity from new schema
   const stockData = medicine.stock || {}
-  const stockQuantity = stockData.quantity ?? 0
+  const stockQuantity = stockData.totalQuantity ?? 0
   
   // Always show as in stock to allow users to order
   const inStock = true
@@ -276,6 +276,17 @@ export default function MedicineDetailPage() {
                   {medicine.brandName}
                 </p>
                 <p className="text-sm text-muted-foreground">Generic: {medicine.genericName}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {medicine.regulatory?.isNarcotic && (
+                    <Badge variant="destructive" className="gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      Narcotic Drug
+                    </Badge>
+                  )}
+                  {medicine.regulatory?.scheduleType && medicine.regulatory.scheduleType !== "None" && (
+                    <Badge variant="outline">Schedule {medicine.regulatory.scheduleType}</Badge>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-baseline gap-3">
@@ -323,9 +334,71 @@ export default function MedicineDetailPage() {
                     <p className="font-medium">{medicine.category}</p>
                   </div>
                 </div>
+
+                {medicine.itemCode && (
+                  <div className="flex items-center gap-2">
+                    <Info className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Item Code</p>
+                      <p className="font-medium">{medicine.itemCode}</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
+              {/* Stats */}
+              {(medicine.totalSold > 0 || medicine.totalViews > 0) && (
+                <>
+                  <Separator />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {medicine.totalSold > 0 && (
+                      <div className="rounded-lg border p-3 bg-muted/30">
+                        <p className="text-sm text-muted-foreground">Total Sold</p>
+                        <p className="text-xl font-bold">{medicine.totalSold}</p>
+                      </div>
+                    )}
+                    {medicine.totalViews > 0 && (
+                      <div className="rounded-lg border p-3 bg-muted/30">
+                        <p className="text-sm text-muted-foreground">Total Views</p>
+                        <p className="text-xl font-bold">{medicine.totalViews}</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
               <Separator />
+
+              {/* Unit Selection */}
+              {medicine.units && (medicine.units.secondary || medicine.units.tertiary) && (
+                <>
+                  <div>
+                    <h3 className="mb-3 font-semibold">Available Units</h3>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-lg border p-3 bg-primary/5">
+                        <p className="text-sm text-muted-foreground">Primary Unit</p>
+                        <p className="font-medium">{medicine.units.primary.name}</p>
+                        <p className="text-xs text-muted-foreground">1 unit</p>
+                      </div>
+                      {medicine.units.secondary && (
+                        <div className="rounded-lg border p-3">
+                          <p className="text-sm text-muted-foreground">Secondary Unit</p>
+                          <p className="font-medium">{medicine.units.secondary.name}</p>
+                          <p className="text-xs text-muted-foreground">{medicine.units.secondary.conversion} {medicine.units.primary.name}</p>
+                        </div>
+                      )}
+                      {medicine.units.tertiary && (
+                        <div className="rounded-lg border p-3">
+                          <p className="text-sm text-muted-foreground">Tertiary Unit</p>
+                          <p className="font-medium">{medicine.units.tertiary.name}</p>
+                          <p className="text-xs text-muted-foreground">{medicine.units.tertiary.conversion} {medicine.units.primary.name}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
 
               {/* Action Buttons */}
               <div className="flex gap-3">
@@ -645,10 +718,28 @@ export default function MedicineDetailPage() {
                               </p>
                             </div>
                           )}
-                          {medicine.pricing.rate !== undefined && medicine.pricing.rate > 0 && (
+                          {medicine.pricing.ptr !== undefined && medicine.pricing.ptr > 0 && (
                             <div className="rounded-lg border p-4">
-                              <p className="text-sm text-muted-foreground">Rate</p>
-                              <p className="text-xl font-bold">₹{medicine.pricing.rate.toFixed(2)}</p>
+                              <p className="text-sm text-muted-foreground">PTR (Price to Retailer)</p>
+                              <p className="text-xl font-bold">₹{medicine.pricing.ptr.toFixed(2)}</p>
+                            </div>
+                          )}
+                          {medicine.pricing.purchaseRate !== undefined && medicine.pricing.purchaseRate > 0 && (
+                            <div className="rounded-lg border p-4">
+                              <p className="text-sm text-muted-foreground">Purchase Rate</p>
+                              <p className="text-xl font-bold">₹{medicine.pricing.purchaseRate.toFixed(2)}</p>
+                            </div>
+                          )}
+                          {medicine.pricing.costPrice !== undefined && medicine.pricing.costPrice > 0 && (
+                            <div className="rounded-lg border p-4">
+                              <p className="text-sm text-muted-foreground">Cost Price</p>
+                              <p className="text-xl font-bold">₹{medicine.pricing.costPrice.toFixed(2)}</p>
+                            </div>
+                          )}
+                          {medicine.pricing.maxDiscount !== undefined && medicine.pricing.maxDiscount > 0 && (
+                            <div className="rounded-lg border p-4">
+                              <p className="text-sm text-muted-foreground">Max Discount</p>
+                              <p className="text-xl font-bold">{medicine.pricing.maxDiscount}%</p>
                             </div>
                           )}
                           {medicine.pricing.addLess !== undefined && medicine.pricing.addLess !== 0 && (
@@ -660,24 +751,111 @@ export default function MedicineDetailPage() {
                         </div>
                       </div>
 
+                      {/* Rate Categories */}
+                      {medicine.pricing.rates && Object.keys(medicine.pricing.rates).length > 0 && (
+                        <>
+                          <Separator />
+                          <div>
+                            <h4 className="mb-3 font-medium">Rate Categories</h4>
+                            <div className="grid gap-3 sm:grid-cols-4">
+                              {medicine.pricing.rates.A !== undefined && (
+                                <div className="rounded-lg border p-3">
+                                  <p className="text-sm text-muted-foreground">Rate A</p>
+                                  <p className="font-medium">₹{medicine.pricing.rates.A.toFixed(2)}</p>
+                                </div>
+                              )}
+                              {medicine.pricing.rates.B !== undefined && (
+                                <div className="rounded-lg border p-3">
+                                  <p className="text-sm text-muted-foreground">Rate B</p>
+                                  <p className="font-medium">₹{medicine.pricing.rates.B.toFixed(2)}</p>
+                                </div>
+                              )}
+                              {medicine.pricing.rates.C !== undefined && (
+                                <div className="rounded-lg border p-3">
+                                  <p className="text-sm text-muted-foreground">Rate C</p>
+                                  <p className="font-medium">₹{medicine.pricing.rates.C.toFixed(2)}</p>
+                                </div>
+                              )}
+                              {medicine.pricing.rates.D !== undefined && (
+                                <div className="rounded-lg border p-3">
+                                  <p className="text-sm text-muted-foreground">Rate D</p>
+                                  <p className="font-medium">₹{medicine.pricing.rates.D.toFixed(2)}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+
                       {medicine.tax && (
                         <>
                           <Separator />
                           <div>
                             <h4 className="mb-3 font-medium">Tax Information</h4>
                             <div className="grid gap-3 sm:grid-cols-2">
+                              {medicine.tax.sgst !== undefined && (
+                                <div className="rounded-lg border p-3">
+                                  <p className="text-sm text-muted-foreground">SGST (State GST)</p>
+                                  <p className="font-medium">{medicine.tax.sgst}%</p>
+                                </div>
+                              )}
+                              {medicine.tax.cgst !== undefined && (
+                                <div className="rounded-lg border p-3">
+                                  <p className="text-sm text-muted-foreground">CGST (Central GST)</p>
+                                  <p className="font-medium">{medicine.tax.cgst}%</p>
+                                </div>
+                              )}
                               <div className="rounded-lg border p-3">
-                                <p className="text-sm text-muted-foreground">SGST (State GST)</p>
-                                <p className="font-medium">{medicine.tax.sgst}%</p>
+                                <p className="text-sm text-muted-foreground">GST Rate</p>
+                                <p className="font-medium">{medicine.tax.gstRate}%</p>
                               </div>
-                              <div className="rounded-lg border p-3">
-                                <p className="text-sm text-muted-foreground">CGST (Central GST)</p>
-                                <p className="font-medium">{medicine.tax.cgst}%</p>
-                              </div>
+                              {medicine.tax.cessRate !== undefined && medicine.tax.cessRate > 0 && (
+                                <div className="rounded-lg border p-3">
+                                  <p className="text-sm text-muted-foreground">Cess Rate</p>
+                                  <p className="font-medium">{medicine.tax.cessRate}%</p>
+                                </div>
+                              )}
+                              {medicine.tax.hsnCode && (
+                                <div className="rounded-lg border p-3">
+                                  <p className="text-sm text-muted-foreground">HSN Code</p>
+                                  <p className="font-medium">{medicine.tax.hsnCode}</p>
+                                </div>
+                              )}
                               <div className="rounded-lg border p-3 bg-muted/50">
-                                <p className="text-sm text-muted-foreground">Total GST</p>
-                                <p className="font-medium">{medicine.tax.sgst + medicine.tax.cgst}%</p>
+                                <p className="text-sm text-muted-foreground">Tax Inclusive</p>
+                                <p className="font-medium">{medicine.tax.isTaxInclusive ? "Yes" : "No"}</p>
                               </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {medicine.batches && medicine.batches.length > 0 && (
+                        <>
+                          <Separator />
+                          <div>
+                            <h4 className="mb-3 font-medium">Batch Information</h4>
+                            <div className="space-y-2">
+                              {medicine.batches.slice(0, 3).map((batch, index) => (
+                                <div key={index} className="rounded-lg border p-3">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="font-medium">Batch: {batch.batchNumber}</span>
+                                    <Badge variant={batch.isExpired ? "destructive" : batch.status === "NORMAL" ? "default" : "secondary"}>
+                                      {batch.status}
+                                    </Badge>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2 text-sm">
+                                    <div>
+                                      <p className="text-muted-foreground">Expiry</p>
+                                      <p>{format(new Date(batch.expiryDate), "PP")}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-muted-foreground">Available</p>
+                                      <p>{batch.available} units</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         </>
@@ -685,7 +863,9 @@ export default function MedicineDetailPage() {
 
                       <Separator />
                       <div className="rounded-lg bg-muted/30 p-4">
-                        <p className="text-sm text-muted-foreground">Note: All prices are inclusive of applicable taxes</p>
+                        <p className="text-sm text-muted-foreground">
+                          Note: Prices are {medicine.tax.isTaxInclusive ? "inclusive" : "exclusive"} of applicable taxes
+                        </p>
                       </div>
                     </div>
                   </CardContent>
@@ -758,6 +938,13 @@ export default function MedicineDetailPage() {
                           </div>
                         </>
                       )}
+
+                      <Separator />
+                      <div className="rounded-lg bg-muted/30 p-4">
+                        <p className="text-sm text-muted-foreground">
+                          Keep medicines in a cool, dry place away from direct sunlight and out of reach of children.
+                        </p>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

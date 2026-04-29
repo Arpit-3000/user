@@ -17,10 +17,12 @@ import { useToast } from "@/hooks/use-toast"
 import { isAuthenticated } from "@/lib/auth-utils"
 import { useRouter } from "next/navigation"
 import { BannerCarousel } from "@/components/banner-carousel"
+import { useCart, dispatchCartUpdate } from "@/lib/cart-context"
 
 export default function MedicinesPage() {
   const { toast } = useToast()
   const router = useRouter()
+  const { updateCartCount } = useCart() // Use cart context
   const [viewMode, setViewMode] = React.useState<"grid" | "list">("grid")
   const [searchQuery, setSearchQuery] = React.useState("")
   const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("")
@@ -112,14 +114,14 @@ export default function MedicinesPage() {
           console.log("=== GENERIC/FORMULA SEARCH API RESPONSE ===")
           console.log("Success:", response.success)
           console.log("Formula:", response.formula)
-          console.log("Total Results:", response.metadata?.totalResults)
+          console.log("Total Results:", response.pagination?.totalResults)
           console.log("===========================================")
           
           if (response.success && response.data) {
             setMedicines(response.data || [])
-            const total = response.metadata?.totalResults || 0
+            const total = response.pagination?.totalResults || 0
             setTotalMedicines(total)
-            setTotalPages(response.metadata?.totalPages || Math.ceil(total / itemsPerPage))
+            setTotalPages(response.pagination?.totalPages || Math.ceil(total / itemsPerPage))
 
             if (response.data.length === 0) {
               toast({
@@ -135,48 +137,76 @@ export default function MedicinesPage() {
         } 
         // Normal Unified Search Mode
         else {
-          const { searchApi } = await import("@/lib/api/search")
-          const searchOptions: any = {
-            limit: itemsPerPage,
-            page: currentPage,
-          }
-
-          // Add letter filter if selected
-          if (selectedLetter !== "all") {
-            searchOptions.letter = selectedLetter
-          }
-
           console.log("=== UNIFIED SEARCH API REQUEST ===")
           console.log("Query:", debouncedSearchQuery.trim())
-          console.log("Options:", searchOptions)
+          console.log("Page:", currentPage)
           console.log("==================================")
 
-          const response = await searchApi.searchMedicines(debouncedSearchQuery.trim(), searchOptions)
-          
-          console.log("=== UNIFIED SEARCH API RESPONSE ===")
-          console.log("Success:", response.success)
-          console.log("Medicines Results:", response.results?.medicines)
-          console.log("Total Results:", response.results?.medicines?.total)
-          console.log("Has More:", response.results?.medicines?.hasMore)
-          console.log("===================================")
-          
-          if (response.success && response.results?.medicines) {
-            const medicinesData = response.results.medicines
-            const newMedicines = medicinesData.data || []
-            setMedicines(newMedicines)
+          try {
+            // Use the same search API as navbar
+            const { searchApi } = await import("@/lib/api/search")
+            const response = await searchApi.searchMedicines(debouncedSearchQuery.trim(), {
+              page: currentPage,
+              limit: itemsPerPage,
+            })
             
-            // Calculate total pages from total count
-            const total = medicinesData.total || 0
-            setTotalMedicines(total)
-            setTotalPages(Math.ceil(total / itemsPerPage))
+            console.log("=== UNIFIED SEARCH API RESPONSE ===")
+            console.log("Success:", response.success)
+            console.log("Results:", response.results)
+            console.log("Total Results:", response.totalResults)
+            console.log("===================================")
+            
+            if (response.success && response.results?.medicines?.data && Array.isArray(response.results.medicines.data)) {
+              const medicinesData = response.results.medicines.data.map((item: any) => ({
+                _id: item.id || '',
+                productName: item.name || 'Unknown Medicine',
+                brandName: item.brandName || '',
+                images: Array.isArray(item.images) ? item.images : [],
+                pricing: {
+                  sellingPrice: item.pricing?.sellingPrice || 0,
+                  mrp: item.pricing?.mrp || 0,
+                  discount: item.pricing?.discount || 0,
+                },
+                prescriptionRequired: item.prescriptionRequired || false,
+                packaging: {
+                  packSize: item.packaging?.packSize || '',
+                },
+                stock: {
+                  totalQuantity: item.stock?.totalQuantity || 0,
+                  quantity: item.stock?.quantity || 0,
+                  unit: item.stock?.unit || 'units',
+                },
+                regulatory: {
+                  isNarcotic: item.regulatory?.isNarcotic || false,
+                  scheduleType: item.regulatory?.scheduleType || 'None',
+                },
+              }))
+              
+              setMedicines(medicinesData)
+              
+              const total = response.results.medicines.total || 0
+              setTotalMedicines(total)
+              setTotalPages(Math.ceil(total / itemsPerPage))
 
-            if (newMedicines.length === 0) {
-              toast({
-                title: "No results found",
-                description: `No medicines found for "${debouncedSearchQuery}"`,
-              })
+              if (medicinesData.length === 0) {
+                toast({
+                  title: "No results found",
+                  description: `No medicines found for "${debouncedSearchQuery}"`,
+                })
+              }
+            } else {
+              console.warn('Invalid search response structure:', response)
+              setMedicines([])
+              setTotalPages(1)
+              setTotalMedicines(0)
             }
-          } else {
+          } catch (searchError: any) {
+            console.error('Search API error:', searchError)
+            toast({
+              title: "Search Error",
+              description: "Failed to search medicines. Please try again.",
+              variant: "destructive",
+            })
             setMedicines([])
             setTotalPages(1)
             setTotalMedicines(0)
@@ -291,6 +321,9 @@ export default function MedicinesPage() {
 
       if (result.message) {
         setCartItems(prev => ({ ...prev, [medicine._id]: 1 }))
+        // Update cart count in real-time
+        updateCartCount()
+        dispatchCartUpdate()
         toast({
           title: "Success",
           description: `${medicine.productName} added to cart`,
@@ -325,6 +358,9 @@ export default function MedicinesPage() {
         await addToCart({ medicineId, quantity: newQuantity })
         setCartItems(prev => ({ ...prev, [medicineId]: newQuantity }))
       }
+      // Update cart count in real-time
+      updateCartCount()
+      dispatchCartUpdate()
     } catch (error: any) {
       toast({
         title: "Error",
@@ -347,6 +383,9 @@ export default function MedicinesPage() {
         delete newItems[medicineId]
         return newItems
       })
+      // Update cart count in real-time
+      updateCartCount()
+      dispatchCartUpdate()
       toast({
         title: "Success",
         description: "Item removed from cart",
@@ -654,6 +693,15 @@ export default function MedicinesPage() {
                       {medicine.packaging?.packSize && (
                         <p className="text-xs text-muted-foreground">{medicine.packaging.packSize}</p>
                       )}
+                      
+                      <div className="flex flex-wrap gap-1">
+                        {medicine.regulatory?.isNarcotic && (
+                          <Badge variant="destructive" className="text-xs h-5">Narcotic</Badge>
+                        )}
+                        {medicine.regulatory?.scheduleType && medicine.regulatory.scheduleType !== "None" && (
+                          <Badge variant="outline" className="text-xs h-5">Sch-{medicine.regulatory.scheduleType}</Badge>
+                        )}
+                      </div>
 
                       <div className="flex items-baseline gap-2">
                         <span className="text-lg font-bold">₹{medicine.pricing.sellingPrice}</span>
@@ -688,7 +736,7 @@ export default function MedicinesPage() {
                           variant="ghost"
                           size="icon"
                           className="h-10 w-10 rounded-none hover:bg-primary hover:text-primary-foreground"
-                          disabled={addingToCart === medicine._id || cartItems[medicine._id] >= medicine.stock.quantity}
+                          disabled={addingToCart === medicine._id || cartItems[medicine._id] >= (medicine.stock.totalQuantity || 999)}
                           onClick={() => handleUpdateQuantity(medicine._id, cartItems[medicine._id] + 1)}
                         >
                           <Plus className="h-4 w-4" />
@@ -757,8 +805,16 @@ export default function MedicinesPage() {
                             {medicine.packaging?.packSize && ` • ${medicine.packaging.packSize}`}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Stock: {medicine.stock.quantity} {medicine.stock.unit}
+                            Stock: {medicine.stock.totalQuantity} {medicine.stock.unit || "units"}
                           </p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {medicine.regulatory?.isNarcotic && (
+                              <Badge variant="destructive" className="text-xs h-5">Narcotic</Badge>
+                            )}
+                            {medicine.regulatory?.scheduleType && medicine.regulatory.scheduleType !== "None" && (
+                              <Badge variant="outline" className="text-xs h-5">Sch-{medicine.regulatory.scheduleType}</Badge>
+                            )}
+                          </div>
                         </div>
 
                         <div className="mt-2 flex items-center justify-between">
@@ -793,7 +849,7 @@ export default function MedicinesPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-9 w-9 rounded-none hover:bg-primary hover:text-primary-foreground"
-                                disabled={addingToCart === medicine._id || cartItems[medicine._id] >= medicine.stock.quantity}
+                                disabled={addingToCart === medicine._id || cartItems[medicine._id] >= medicine.stock.totalQuantity}
                                 onClick={() => handleUpdateQuantity(medicine._id, cartItems[medicine._id] + 1)}
                               >
                                 <Plus className="h-4 w-4" />

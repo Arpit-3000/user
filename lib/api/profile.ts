@@ -37,6 +37,7 @@ export const profileApi = {
     firstName?: string
     lastName?: string
     dob?: string
+    age?: number
     email?: string
     contact?: string
     gender?: string
@@ -147,7 +148,7 @@ export const profileApi = {
 
   uploadProfileImage: async (imageFile: File) => {
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("authToken") : null
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
       const formData = new FormData()
       formData.append("profileImage", imageFile)
 

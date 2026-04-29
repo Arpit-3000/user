@@ -17,6 +17,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import { PrescriptionSelector } from '@/components/prescription-selector';
+import type { Prescription } from '@/lib/api/prescriptions';
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -37,14 +39,37 @@ export default function CheckoutPage() {
   });
   const [useCustomAddress, setUseCustomAddress] = useState(false);
   const [contact, setContact] = useState('');
+  const [name, setName] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'COD' | 'Online'>('COD');
   const [prescriptionStatus, setPrescriptionStatus] = useState<any>(null);
   const [prescriptionFile, setPrescriptionFile] = useState<File | null>(null);
   const [prescriptionPreview, setPrescriptionPreview] = useState<string | null>(null);
+  const [selectedPrescriptions, setSelectedPrescriptions] = useState<Prescription[]>([]);
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Effect to auto-fill name when default address is selected
+  useEffect(() => {
+    if (!useCustomAddress && selectedAddressId && addresses.length > 0) {
+      // If default address is selected, auto-fill name from profile
+      const selectedAddress = addresses.find(addr => addr._id === selectedAddressId);
+      if (selectedAddress?.isDefault) {
+        // Fetch user profile to get name if not already available
+        if (!name) {
+          profileApi.get().then(profileData => {
+            const userName = profileData.name || profileData.user?.name || '';
+            if (userName) {
+              setName(userName);
+            }
+          }).catch(error => {
+            console.error('Error fetching user name:', error);
+          });
+        }
+      }
+    }
+  }, [selectedAddressId, useCustomAddress, addresses, name]);
 
   const fetchData = async () => {
     try {
@@ -98,16 +123,26 @@ export default function CheckoutPage() {
       
       setAddresses(addressList);
       setContact(profileData.contact || profileData.user?.contact || profileData.phone || profileData.user?.phone || '');
+      
+      // Set name from profile
+      const userName = profileData.name || profileData.user?.name || '';
+      setName(userName);
 
       if (addressList.length > 0) {
         const defaultAddr = addressList.find((a: any) => a.isDefault);
-        setSelectedAddressId(defaultAddr?._id || addressList[0]._id);
+        const selectedAddr = defaultAddr || addressList[0];
+        setSelectedAddressId(selectedAddr._id);
+        
+        // If default address is selected and we have user name, auto-fill it
+        if (defaultAddr && userName) {
+          setName(userName);
+        }
       }
 
       // Check prescription status
       if (cartData.cart?._id) {
         const prescStatus = await checkPrescriptionStatus(cartData.cart._id);
-        setPrescriptionStatus(prescStatus.data);
+        setPrescriptionStatus(prescStatus); // Now returns data directly
       }
     } catch (error: any) {
       toast({
@@ -120,60 +155,21 @@ export default function CheckoutPage() {
     }
   };
 
-  const handlePrescriptionUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Validate file type
-      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
-      if (!validTypes.includes(file.type)) {
-        toast({
-          title: 'Invalid File Type',
-          description: 'Please upload a JPG, PNG, or PDF file',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: 'File Too Large',
-          description: 'Please upload a file smaller than 5MB',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      setPrescriptionFile(file);
-
-      // Create preview for images
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setPrescriptionPreview(reader.result as string);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        setPrescriptionPreview(null);
-      }
-
-      toast({
-        title: 'Prescription Uploaded',
-        description: 'Prescription uploaded successfully',
-      });
-    }
-  };
-
-  const handleRemovePrescription = () => {
-    setPrescriptionFile(null);
-    setPrescriptionPreview(null);
-  };
-
   const handlePlaceOrder = async () => {
+    // Check if user has any address option available
+    if (addresses.length === 0 && !useCustomAddress) {
+      toast({
+        title: 'No Address Found',
+        description: 'Please add a delivery address in your profile or use custom address option',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!useCustomAddress && !selectedAddressId) {
       toast({
         title: 'Address Required',
-        description: 'Please select a delivery address',
+        description: 'Please select a delivery address or add a new one',
         variant: 'destructive',
       });
       return;
@@ -181,8 +177,8 @@ export default function CheckoutPage() {
 
     if (useCustomAddress && (!customAddress.houseNumber || !customAddress.street || !customAddress.city || !customAddress.state || !customAddress.pincode)) {
       toast({
-        title: 'Address Required',
-        description: 'Please fill all address fields',
+        title: 'Incomplete Address',
+        description: 'Please fill all address fields (House Number, Street, City, State, Pincode)',
         variant: 'destructive',
       });
       return;
@@ -197,11 +193,22 @@ export default function CheckoutPage() {
       return;
     }
 
-    // Check if prescription is required but not uploaded
-    if (prescriptionStatus?.prescriptionStatus?.hasPrescriptionRequired && !prescriptionFile) {
+    if (!name.trim()) {
+      toast({
+        title: 'Name Required',
+        description: 'Please enter your name',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Check if prescription is required but not provided
+    if (prescriptionStatus?.data?.prescriptionStatus?.hasPrescriptionRequired && 
+        !prescriptionFile && 
+        selectedPrescriptions.length === 0) {
       toast({
         title: 'Prescription Required',
-        description: 'Please upload a valid prescription before placing order',
+        description: 'Please select an existing prescription or upload a new one before placing order',
         variant: 'destructive',
       });
       return;
@@ -212,12 +219,32 @@ export default function CheckoutPage() {
       let addressString = '';
 
       if (useCustomAddress) {
+        // Validate custom address is not empty
+        if (!customAddress.houseNumber.trim() || !customAddress.street.trim() || !customAddress.city.trim() || !customAddress.state.trim() || !customAddress.pincode.trim()) {
+          toast({
+            title: 'Invalid Address',
+            description: 'Address fields cannot be empty',
+            variant: 'destructive',
+          });
+          setPlacing(false);
+          return;
+        }
         // Combine all address fields into single string
         addressString = `${customAddress.houseNumber}, ${customAddress.street}, ${customAddress.city}, ${customAddress.state} - ${customAddress.pincode}`;
       } else if (selectedAddressId) {
         // Find the selected address and format it as a string
         const selectedAddr = addresses.find(addr => addr._id === selectedAddressId);
         if (selectedAddr) {
+          // Validate selected address has required fields
+          if (!selectedAddr.street || !selectedAddr.city || !selectedAddr.state || !selectedAddr.pincode) {
+            toast({
+              title: 'Incomplete Address',
+              description: 'Selected address is incomplete. Please update it in your profile or use custom address',
+              variant: 'destructive',
+            });
+            setPlacing(false);
+            return;
+          }
           addressString = `${selectedAddr.street}, ${selectedAddr.city}, ${selectedAddr.state} ${selectedAddr.pincode}`;
         } else {
           toast({
@@ -238,6 +265,18 @@ export default function CheckoutPage() {
         return;
       }
 
+      // Final validation: Check if address string is meaningful (not just commas and spaces)
+      const cleanAddress = addressString.replace(/[,\s-]/g, '');
+      if (cleanAddress.length < 5) {
+        toast({
+          title: 'Invalid Address',
+          description: 'Please provide a complete delivery address with all required details',
+          variant: 'destructive',
+        });
+        setPlacing(false);
+        return;
+      }
+
       // Handle payment based on method
       if (paymentMethod === 'Online') {
         try {
@@ -245,6 +284,7 @@ export default function CheckoutPage() {
             cartId,
             address: addressString,
             contact,
+            name,
           });
 
           // Create Razorpay payment order
@@ -262,7 +302,7 @@ export default function CheckoutPage() {
           await initiateRazorpayPayment(
             paymentData,
             {
-              name: user?.name || 'User',
+              name: name || user?.name || 'User',
               email: user?.email || '',
               contact: contact,
             },
@@ -302,20 +342,59 @@ export default function CheckoutPage() {
           cartId,
           address: addressString,
           contact,
+          name,
           paymentMethod: 'COD',
+          prescriptions: selectedPrescriptions
         };
 
         const result = await placeOrder(orderData);
+        // console.log("$$$$",selectedPrescriptions);
+        // // If prescriptions were selected, upload them to the order
+        // if (selectedPrescriptions.length > 0) {
+        //   try {
+        //     const { uploadPrescription: uploadOrderPrescription } = await import('@/lib/api/orders');
+            
+        //     // Convert prescription URLs to files and upload
+        //     const prescriptionFiles: File[] = [];
+        //     for (const prescription of selectedPrescriptions) {
+        //       try {
+        //         console.log(prescription);
+        //         const response = await fetch(prescription.imageUrl);
+        //         console.log("======", response);
+        //         const blob = await response.blob();
+        //         console.log("======", blob);
+        //         const filename = prescription.imageUrl.split('/').pop() || 'prescription.jpg';
+        //         console.log("======", filename);
+        //         const file = new File([blob], filename, { type: blob.type });
+        //         console.log("======", file);
+        //         prescriptionFiles.push(file);
+        //       } catch (error) {
+        //         console.error('Error converting prescription to file:', error);
+        //       }
+        //     }
+        //     console.log("-=-=-=-=-=-=-=-=-=-=-=-=-",prescriptionFiles)
+            
+        //     if (prescriptionFiles.length > 0 && result.order?._id) {
+        //       await uploadOrderPrescription(result.order._id, prescriptionFiles);
+        //       console.log('Prescriptions uploaded to order successfully');
+        //     }
+        //   } catch (error) {
+        //     console.error('Error uploading prescriptions to order:', error);
+        //     // Don't fail the order placement for this
+        //   }
+        // }
 
         toast({
           title: 'Success',
-          description: 'Order placed successfully!',
+          description: selectedPrescriptions.length > 0 
+            ? 'Order placed successfully with prescriptions!' 
+            : 'Order placed successfully!',
         });
 
-        if (result.order?._id) {
-          router.push(`/orders/${result.order._id}`);
+        if (result.orderId) {
+          router.push(`/orders/${result.orderId}`);
         } else {
-          router.push('/orders');
+          router.push("/orders");
         }
       }
     } catch (error: any) {
@@ -348,8 +427,8 @@ export default function CheckoutPage() {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Prescription Warning & Upload */}
-          {prescriptionStatus?.prescriptionStatus?.hasPrescriptionRequired && (
+          {/* Prescription Warning & Selection */}
+          {prescriptionStatus?.data?.prescriptionStatus?.hasPrescriptionRequired && (
             <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950">
               <CardContent className="p-4">
                 <div className="flex gap-3">
@@ -362,70 +441,22 @@ export default function CheckoutPage() {
                       {prescriptionStatus.message}
                     </p>
                     <p className="text-sm text-amber-800 dark:text-amber-200 mt-1">
-                      Please upload a valid prescription to proceed with the order.
+                      Please select an existing prescription or upload a new one to proceed.
                     </p>
-
-                    {/* Prescription Upload Section */}
-                    <div className="mt-4">
-                      {!prescriptionFile ? (
-                        <div>
-                          <Label
-                            htmlFor="prescription-upload"
-                            className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md transition-colors"
-                          >
-                            <Upload className="h-4 w-4" />
-                            Upload Prescription
-                          </Label>
-                          <Input
-                            id="prescription-upload"
-                            type="file"
-                            accept="image/jpeg,image/jpg,image/png,application/pdf"
-                            onChange={handlePrescriptionUpload}
-                            className="hidden"
-                          />
-                          <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">
-                            Accepted formats: JPG, PNG, PDF (Max 5MB)
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="bg-white dark:bg-amber-900 rounded-md p-3 border border-amber-300">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-start gap-2 flex-1">
-                              <FileText className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-amber-900 dark:text-amber-100 truncate">
-                                  {prescriptionFile.name}
-                                </p>
-                                <p className="text-xs text-amber-700 dark:text-amber-300">
-                                  {(prescriptionFile.size / 1024).toFixed(2)} KB
-                                </p>
-                              </div>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={handleRemovePrescription}
-                              className="h-8 w-8 p-0 text-amber-600 hover:text-amber-700 hover:bg-amber-100"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          {prescriptionPreview && (
-                            <div className="mt-3">
-                              <img
-                                src={prescriptionPreview}
-                                alt="Prescription preview"
-                                className="max-h-40 rounded border border-amber-300"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* Prescription Selector */}
+          {prescriptionStatus?.data?.prescriptionStatus?.hasPrescriptionRequired && (
+            <PrescriptionSelector
+              onPrescriptionSelect={setSelectedPrescriptions}
+              allowMultiple={true}
+              showUploadOption={true}
+              className="border-amber-200"
+            />
           )}
 
           {/* Delivery Address */}
@@ -527,6 +558,23 @@ export default function CheckoutPage() {
                   </div>
                 </div>
               )}
+
+              <div>
+                <Label htmlFor="name">Full Name</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Enter your full name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="mt-1"
+                />
+                {!useCustomAddress && selectedAddressId && addresses.find(addr => addr._id === selectedAddressId)?.isDefault && name && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Name auto-filled from your profile (you can edit it if needed)
+                  </p>
+                )}
+              </div>
 
               <div>
                 <Label htmlFor="contact">Contact Number</Label>
@@ -651,15 +699,19 @@ export default function CheckoutPage() {
                 className="w-full"
                 size="lg"
                 onClick={handlePlaceOrder}
-                disabled={placing || (prescriptionStatus?.prescriptionStatus?.hasPrescriptionRequired && !prescriptionFile)}
+                disabled={placing || (prescriptionStatus?.data?.prescriptionStatus?.hasPrescriptionRequired && 
+                         !prescriptionFile && 
+                         selectedPrescriptions.length === 0)}
               >
                 {placing ? (
                   <>
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                     Placing Order...
                   </>
-                ) : prescriptionStatus?.prescriptionStatus?.hasPrescriptionRequired && !prescriptionFile ? (
-                  'Upload Prescription to Continue'
+                ) : prescriptionStatus?.data?.prescriptionStatus?.hasPrescriptionRequired && 
+                     !prescriptionFile && 
+                     selectedPrescriptions.length === 0 ? (
+                  'Select or Upload Prescription to Continue'
                 ) : (
                   `Place Order - ₹${totalPrice}`
                 )}

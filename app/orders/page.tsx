@@ -3,13 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Package, Calendar, CreditCard, Truck, FileText, RefreshCw, Filter, Download } from 'lucide-react';
-import { getOrders, getOrderStatistics, getOrdersWithFilters, type Order, type OrderStatistics } from '@/lib/api/orders';
+import { Package, Calendar, CreditCard, Truck, FileText, RefreshCw, Filter } from 'lucide-react';
+import { getOrders, getOrderStatistics, getOrdersWithFilters, reorderOrder, type Order, type OrderStatistics } from '@/lib/api/orders';
+import { returnUtils, SalesReturn } from '@/lib/api/returns';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ReturnRequestModal } from '@/components/return-request-modal';
+import { ReturnDetailsModal } from '@/components/return-details-modal';
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -19,46 +22,152 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [activeTab, setActiveTab] = useState('all');
+  const [orderSubTab, setOrderSubTab] = useState('all');
+  const [reorderingOrderId, setReorderingOrderId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    paymentStatus: '',
+    startDate: '',
+    endDate: '',
+    sortBy: 'orderedAt',
+    sortOrder: 'desc' as 'asc' | 'desc',
+  });
+
+  // Return modal states
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [selectedOrderIdForReturn, setSelectedOrderIdForReturn] = useState<string | null>(null);
+  const [showReturnDetails, setShowReturnDetails] = useState(false);
+  const [selectedReturnForDetails, setSelectedReturnForDetails] = useState<SalesReturn | null>(null);
 
   useEffect(() => {
     fetchData();
-  }, [currentPage, activeTab]);
+  }, [currentPage, orderSubTab, filters]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       
-      // Fetch orders with optional status filter
+      // Check if we need to use filters or can use simple endpoint
+      const hasFilters = orderSubTab !== 'all' || 
+                        filters.paymentStatus || 
+                        filters.startDate || 
+                        filters.endDate;
+
       let ordersData;
-      if (activeTab === 'all') {
-        ordersData = await getOrders(currentPage, 10);
-      } else {
-        // Map tab to status
-        const statusMap: Record<string, string> = {
-          'processing': 'Processing',
-          'shipped': 'Shipped',
-          'delivered': 'Delivered',
-        };
-        const status = statusMap[activeTab];
-        ordersData = await getOrdersWithFilters({
+
+      if (hasFilters) {
+        // Build filter params - always include page, limit, sortBy, sortOrder
+        const filterParams: any = {
           page: currentPage,
           limit: 10,
-          status: status,
+          sortBy: filters.sortBy || 'orderedAt',
+          sortOrder: filters.sortOrder || 'desc',
+        };
+
+        // Add status filter from sub-tab
+        if (orderSubTab !== 'all') {
+          const statusMap: Record<string, string> = {
+            'processing': 'Processing',
+            'shipped': 'Shipped',
+            'delivered': 'Delivered',
+          };
+          filterParams.status = statusMap[orderSubTab];
+        }
+
+        // Add additional filters only if they have values
+        if (filters.paymentStatus && filters.paymentStatus !== '') {
+          filterParams.paymentStatus = filters.paymentStatus;
+        }
+        if (filters.startDate && filters.startDate !== '') {
+          filterParams.startDate = filters.startDate;
+        }
+        if (filters.endDate && filters.endDate !== '') {
+          filterParams.endDate = filters.endDate;
+        }
+
+        console.log('Fetching orders with filters:', filterParams);
+
+        // Try filter endpoint, fallback to regular endpoint if it fails
+        try {
+          ordersData = await getOrdersWithFilters(filterParams);
+        } catch (filterError: any) {
+          console.warn('Filter endpoint failed, falling back to regular endpoint:', filterError.message);
+          console.warn('Note: Backend /orders/filter route may need to be fixed');
+          // Fallback to regular orders endpoint
+          ordersData = await getOrders(currentPage, 10);
+          // Client-side filtering if needed
+          if (ordersData.success && ordersData.data) {
+            let filteredOrders = ordersData.data.orders;
+            
+            // Apply status filter
+            if (orderSubTab !== 'all') {
+              const statusMap: Record<string, string> = {
+                'processing': 'Processing',
+                'shipped': 'Shipped',
+                'delivered': 'Delivered',
+              };
+              const targetStatus = statusMap[orderSubTab];
+              filteredOrders = filteredOrders.filter((order: Order) => 
+                order.status === targetStatus || order.deliveryStatus === targetStatus
+              );
+            }
+            
+            // Apply payment status filter
+            if (filters.paymentStatus) {
+              filteredOrders = filteredOrders.filter((order: Order) => 
+                order.paymentStatus === filters.paymentStatus
+              );
+            }
+            
+            ordersData.data.orders = filteredOrders;
+          }
+        }
+      } else {
+        // Use simple endpoint when no filters
+        console.log('Fetching orders without filters');
+        ordersData = await getOrders(currentPage, 10);
+      }
+      
+      console.log('Orders response:', ordersData);
+
+      console.log('Orders response:', ordersData);
+
+      if (ordersData.success && ordersData.data) {
+        setOrders(ordersData.data.orders || []);
+        setTotalPages(ordersData.data.pagination?.totalPages || 1);
+      } else {
+        console.error('Invalid response structure:', ordersData);
+        setOrders([]);
+        setTotalPages(1);
+      }
+      
+      // Try to fetch statistics, but don't fail if it doesn't work
+      try {
+        const statsData = await getOrderStatistics();
+        setStatistics(statsData.statistics);
+      } catch (statsError) {
+        console.log('Statistics not available:', statsError);
+        // Calculate basic statistics from orders data
+        const allOrders = ordersData.data.orders;
+        setStatistics({
+          totalOrders: ordersData.data.pagination.totalOrders || allOrders.length,
+          totalAmount: allOrders.reduce((sum: number, order: Order) => sum + order.totalAmount, 0),
+          pendingOrders: allOrders.filter((o: Order) => o.status === 'Order Placed').length,
+          processingOrders: allOrders.filter((o: Order) => o.status === 'Processing').length,
+          shippedOrders: allOrders.filter((o: Order) => o.status === 'Shipped').length,
+          deliveredOrders: allOrders.filter((o: Order) => o.status === 'Delivered').length,
+          cancelledOrders: allOrders.filter((o: Order) => o.status === 'Cancelled').length,
         });
       }
-
-      const statsData = await getOrderStatistics();
-
-      setOrders(ordersData.data.orders);
-      setTotalPages(ordersData.data.pagination.totalPages);
-      setStatistics(statsData.statistics);
     } catch (error: any) {
+      console.error('Error fetching orders:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: error.message || 'Failed to fetch orders',
         variant: 'destructive',
       });
+      setOrders([]);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
@@ -84,18 +193,36 @@ export default function OrdersPage() {
     return statusMap[status] || 'bg-gray-100 text-gray-800';
   };
 
-  const formatPaymentMethod = (method: string) => {
-    // If method already contains details (e.g., "UPI (user@paytm)"), return as is
-    if (method && (method.includes('(') || method.includes('*'))) {
-      return method;
-    }
-    // Otherwise return the basic method
-    return method || 'N/A';
+  const handleReturnRequest = (order: Order) => {
+    setSelectedOrderIdForReturn(order._id);
+    setShowReturnModal(true);
   };
 
-  const filterOrdersByStatus = (status: string) => {
-    // Filtering is now done server-side, so just return all orders
-    return orders;
+  const handleReturnCreated = () => {
+    toast({
+      title: "Return request created",
+      description: "Your return request has been submitted successfully"
+    });
+  };
+
+  const handleReorder = async (orderId: string) => {
+    setReorderingOrderId(orderId);
+    try {
+      await reorderOrder(orderId);
+      toast({
+        title: 'Success',
+        description: 'Items added to cart successfully',
+      });
+      router.push('/cart');
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setReorderingOrderId(null);
+    }
   };
 
   if (loading) {
@@ -171,36 +298,142 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* Orders List with Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="all">All Orders</TabsTrigger>
-          <TabsTrigger value="processing">Processing</TabsTrigger>
-          <TabsTrigger value="shipped">Shipped</TabsTrigger>
-          <TabsTrigger value="delivered">Delivered</TabsTrigger>
-        </TabsList>
+      {/* Orders List with Sub-tabs only */}
+      <div className="flex items-center justify-between mb-4">
+        <Tabs value={orderSubTab} onValueChange={(value) => {
+          setOrderSubTab(value);
+          setCurrentPage(1);
+        }} className="flex-1">
+          <TabsList>
+            <TabsTrigger value="all">All Orders</TabsTrigger>
+            <TabsTrigger value="processing">Processing</TabsTrigger>
+            <TabsTrigger value="shipped">Shipped</TabsTrigger>
+            <TabsTrigger value="delivered">Delivered</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowFilters(!showFilters)}
+          className="ml-4"
+        >
+          <Filter className="h-4 w-4 mr-2" />
+          {showFilters ? 'Hide Filters' : 'Show Filters'}
+        </Button>
+      </div>
 
-        <TabsContent value={activeTab}>
-          {filterOrdersByStatus(activeTab).length === 0 ? (
-            <Card>
-              <CardContent className="p-12 text-center">
-                <Package className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-xl font-semibold mb-2">
-                  {activeTab === 'all' ? 'No orders found' : `No ${activeTab} orders`}
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  {activeTab === 'all' 
-                    ? "You haven't placed any orders yet" 
-                    : `You don't have any ${activeTab} orders at the moment`}
-                </p>
-                {activeTab === 'all' && (
-                  <Button onClick={() => router.push('/')}>Start Shopping</Button>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {filterOrdersByStatus(activeTab).map((order) => (
+      {/* Advanced Filters */}
+      {showFilters && (
+        <Card className="mb-4">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Payment Status</label>
+                <select
+                  className="w-full rounded-md border px-3 py-2"
+                  value={filters.paymentStatus}
+                  onChange={(e) => {
+                    setFilters({ ...filters, paymentStatus: e.target.value });
+                    setCurrentPage(1);
+                  }}
+                >
+                  <option value="">All</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Failed">Failed</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Start Date</label>
+                <input
+                  type="date"
+                  className="w-full rounded-md border px-3 py-2"
+                  value={filters.startDate}
+                  onChange={(e) => {
+                    setFilters({ ...filters, startDate: e.target.value });
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">End Date</label>
+                <input
+                  type="date"
+                  className="w-full rounded-md border px-3 py-2"
+                  value={filters.endDate}
+                  onChange={(e) => {
+                    setFilters({ ...filters, endDate: e.target.value });
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Sort By</label>
+                <select
+                  className="w-full rounded-md border px-3 py-2"
+                  value={`${filters.sortBy}-${filters.sortOrder}`}
+                  onChange={(e) => {
+                    const [sortBy, sortOrder] = e.target.value.split('-');
+                    setFilters({ ...filters, sortBy, sortOrder: sortOrder as 'asc' | 'desc' });
+                    setCurrentPage(1);
+                  }}
+                >
+                  <option value="orderedAt-desc">Newest First</option>
+                  <option value="orderedAt-asc">Oldest First</option>
+                  <option value="totalAmount-desc">Highest Amount</option>
+                  <option value="totalAmount-asc">Lowest Amount</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setFilters({
+                    paymentStatus: '',
+                    startDate: '',
+                    endDate: '',
+                    sortBy: 'orderedAt',
+                    sortOrder: 'desc',
+                  });
+                  setCurrentPage(1);
+                }}
+              >
+                Clear Filters
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Orders Content */}
+      <div>
+        {orders.length === 0 ? (
+          <Card>
+            <CardContent className="p-12 text-center">
+              <Package className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">
+                {orderSubTab === 'all' ? 'No orders found' : `No ${orderSubTab} orders`}
+              </h3>
+              <p className="text-muted-foreground mb-4">
+                {orderSubTab === 'all' 
+                  ? "You haven't placed any orders yet" 
+                  : `You don't have any ${orderSubTab} orders at the moment`}
+              </p>
+              {orderSubTab === 'all' && (
+                <Button onClick={() => router.push('/')}>Start Shopping</Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {orders.map((order) => (
                 <Card key={order._id} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-6">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
@@ -223,15 +456,40 @@ export default function OrdersPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => router.push(`/orders/${order._id}`)}
-                        >
-                          <FileText className="h-4 w-4 mr-2" />
-                          View Details
-                        </Button>
+                      <div className="flex flex-col items-end gap-2">
+                        {/* Want to return? - Show only for completed/delivered orders within return window */}
+                        {returnUtils.canReturnOrder(order.status, order.deliveryStatus || '', order.orderedAt) && (
+                          <button
+                            onClick={() => handleReturnRequest(order)}
+                            className="text-sm text-muted-foreground hover:text-orange-600 transition-colors underline decoration-dotted underline-offset-4 hover:decoration-solid"
+                          >
+                            Want to return?
+                          </button>
+                        )}
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => router.push(`/orders/${order._id}`)}
+                          >
+                            <FileText className="h-4 w-4 mr-2" />
+                            View Details
+                          </Button>
+                          
+                          {/* Reorder button - Only show for delivered orders */}
+                          {(order.deliveryStatus === 'Delivered' || order.status === 'Delivered') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleReorder(order._id)}
+                              disabled={reorderingOrderId === order._id}
+                            >
+                              <RefreshCw className={`h-4 w-4 mr-2 ${reorderingOrderId === order._id ? 'animate-spin' : ''}`} />
+                              {reorderingOrderId === order._id ? 'Adding...' : 'Reorder'}
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -249,6 +507,15 @@ export default function OrdersPage() {
                           itemName = item.categoryProduct.productName;
                         } else if (item.labTest) {
                           itemName = item.labTest.testName;
+                        } else {
+                          // Fallback when details aren't populated
+                          if (item.productType === 'medicine') {
+                            itemName = 'Medicine Item';
+                          } else if (item.productType === 'labTest') {
+                            itemName = 'Lab Test';
+                          } else {
+                            itemName = 'Product Item';
+                          }
                         }
 
                         return (
@@ -264,7 +531,11 @@ export default function OrdersPage() {
                               </div>
                             ) : (
                               <div className="h-16 w-16 rounded-lg bg-blue-100 flex items-center justify-center border">
-                                <FileText className="h-8 w-8 text-blue-600" />
+                                {item.productType === 'labTest' || item.labTest ? (
+                                  <FileText className="h-8 w-8 text-blue-600" />
+                                ) : (
+                                  <Package className="h-8 w-8 text-blue-600" />
+                                )}
                               </div>
                             )}
                           </div>
@@ -278,20 +549,31 @@ export default function OrdersPage() {
                     </div>
 
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 pt-4 border-t">
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 flex-wrap">
                         <div>
-                          <p className="text-sm text-muted-foreground">Payment</p>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{formatPaymentMethod(order.paymentMethod)}</span>
-                            <Badge className={getPaymentStatusColor(order.paymentStatus)}>
-                              {order.paymentStatus}
-                            </Badge>
-                          </div>
+                          <p className="text-sm text-muted-foreground">Payment Status</p>
+                          <Badge className={getPaymentStatusColor(order.paymentStatus)}>
+                            {order.paymentStatus}
+                          </Badge>
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Total Amount</p>
                           <p className="font-bold text-lg">₹{order.totalAmount}</p>
                         </div>
+                        {order.hasLabTests && (
+                          <div>
+                            <Badge variant="outline" className="text-xs">
+                              <FileText className="h-3 w-3 mr-1" />
+                              Lab Tests Included
+                            </Badge>
+                          </div>
+                        )}
+                        {order.deliveryOTP && order.deliveryStatus !== 'Delivered' && (
+                          <div>
+                            <p className="text-sm text-muted-foreground">Delivery OTP</p>
+                            <p className="font-bold text-primary">{order.deliveryOTP}</p>
+                          </div>
+                        )}
                       </div>
 
                       {order.deliveryStatus && (
@@ -306,31 +588,51 @@ export default function OrdersPage() {
               ))}
             </div>
           )}
-        </TabsContent>
-      </Tabs>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 mt-6">
-          <Button
-            variant="outline"
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-          >
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-          >
-            Next
-          </Button>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </div>
-      )}
+
+      {/* Return Request Modal */}
+      <ReturnRequestModal
+        isOpen={showReturnModal}
+        onClose={() => {
+          setShowReturnModal(false);
+          setSelectedOrderIdForReturn(null);
+        }}
+        orderId={selectedOrderIdForReturn || ''}
+        onReturnCreated={handleReturnCreated}
+      />
+
+      {/* Return Details Modal */}
+      <ReturnDetailsModal
+        isOpen={showReturnDetails}
+        onClose={() => {
+          setShowReturnDetails(false);
+          setSelectedReturnForDetails(null);
+        }}
+        returnData={selectedReturnForDetails}
+      />
     </div>
   );
 }
